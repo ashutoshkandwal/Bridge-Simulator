@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECDIS Viewer - Electronic Chart Display</title>
+    <!-- Inline favicon to prevent 404 requests -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%230d2847'/%3E%3Cpath d='M12 44l16-24 10 14 6-8 8 12' stroke='%234fc3f7' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='28' cy='20' r='5' fill='%234fc3f7'/%3E%3C/svg%3E" />
+    
+    <!-- Leaflet CSS (local - works offline) -->
+    <link rel="stylesheet" href="/static/leaflet.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a1929; /* Keep overall app dark */
+            color: #e0e0e0;
+        }
+        
+        #map {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            right: 0;
+            bottom: 40px;
+            background: #ffffff; /* Water background set to white */
+        }
+        
+        .header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: linear-gradient(135deg, #1e3a5f 0%, #0d2847 100%);
+            border-bottom: 2px solid #2d5a8c;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #4fc3f7;
+            margin-right: 30px;
+        }
+        
+        .status-panel {
+            display: flex;
+            gap: 30px;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        .layer-toggles {
+            margin-left: auto;
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            color: #b3e5fc;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .layer-toggles label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .layer-toggles input[type="checkbox"] {
+            accent-color: #4fc3f7;
+        }
+        
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        
+        .status-label {
+            font-size: 11px;
+            color: #90caf9;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        
+        .status-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            font-family: 'Courier New', monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 28ch;
+        }
+        
+        .footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: #0d1f36;
+            border-top: 1px solid #1e3a5f;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            font-size: 12px;
+            color: #90caf9;
+            gap: 20px;
+        }
+        
+        .cursor-info {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #4fc3f7;
+            display: flex;
+            gap: 15px;
+        }
+        
+        /* Legend box */
+        .legend-box {
+            position: absolute;
+            top: 70px;
+            right: 10px;
+            background: rgba(13,31,54,0.85);
+            border: 1px solid #2d5a8c;
+            border-radius: 6px;
+            padding: 8px 10px;
+            color: #e0e0e0;
+            font-size: 12px;
+            z-index: 1100;
+            max-width: 220px;
+        }
+        .legend-box h4 {
+            margin: 0 0 6px 0;
+            font-size: 12px;
+            color: #b3e5fc;
+            font-weight: 600;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+        .legend-swatch { width: 16px; height: 10px; border: 1px solid #2d5a8c; }
+
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+        
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f44336;
+            animation: pulse 2s infinite;
+        }
+        
+        .connection-dot.connected {
+            background: #4caf50;
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .leaflet-container {
+            background: #ffffff !important; /* White water */
+        }
+
+        /* Ship label styling */
+        .leaflet-tooltip.ship-label {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            color: #00e5ff;
+            font-weight: 700;
+            text-shadow: 0 0 6px rgba(0,0,0,0.7);
+        }
+        
+        /* Custom ship marker */
+        .ship-marker {
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 20px solid #ffeb3b;
+            position: relative;
+        }
+        
+        .ship-marker::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 30px;
+            background: #ffeb3b;
+            left: -2px;
+            top: 20px;
+        }
+        /* Navigation ribbon - auto-hide */
+        .side-ribbon {
+            position: fixed;
+            top: 12px;
+            left: -36px; /* Hidden by default */
+            width: 44px;
+            padding: 6px;
+            background: rgba(13,40,71,0.95);
+            border: 1px solid #4fc3f7;
+            border-radius: 0 8px 8px 0;
+            border-left: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 2001;
+            backdrop-filter: blur(2px);
+            transition: left 0.3s ease;
+        }
+        .side-ribbon:hover {
+            left: 0; /* Slide in on hover */
+        }
+        .side-ribbon::after {
+            content: '▶';
+            position: absolute;
+            right: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 40px;
+            background: rgba(13,40,71,0.95);
+            border: 1px solid #4fc3f7;
+            border-left: none;
+            border-radius: 0 6px 6px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #4fc3f7;
+            cursor: pointer;
+        }
+        .side-ribbon:hover::after {
+            content: '◀';
+        }
+        .ribbon-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            margin: 0;
+            border-radius: 6px;
+            background: #0d2847;
+            color: #4fc3f7;
+            border: 1px solid #2d5a8c;
+            font-size: 16px;
+            line-height: 32px;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background .2s, border-color .2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ribbon-btn:hover { background: #12355d; border-color:#4fc3f7; }
+        .ribbon-btn.exit { color:#ff6666; border-color:#a00; }
+        .ribbon-btn.fullscreen { color:#ffaa00; border-color:#aa6600; }
+        
+        /* Position zoom control to left of depth legend */
+        .leaflet-top.leaflet-right {
+            top: 70px;
+            right: 240px; /* Just to the left of the 220px wide legend box + margin */
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation ribbon -->
+    <div class="side-ribbon" aria-label="Navigation">
+        <button class="ribbon-btn" id="nav-main" title="Go to Main Menu">🏠</button>
+        <button class="ribbon-btn fullscreen" id="nav-fullscreen" title="Toggle Fullscreen">⛶</button>
+        <button class="ribbon-btn" id="nav-radar" title="Go to Radar">📡</button>
+        <button class="ribbon-btn" id="nav-ecdis" title="ECDIS (current)">🗺️</button>
+        <button class="ribbon-btn" id="nav-3d" title="Go to 3D Bridge View">🌉</button>
+        <button class="ribbon-btn" id="nav-bridge" title="Go to Bridge Controls">⚙️</button>
+        <button class="ribbon-btn exit" id="nav-exit" title="Exit Simulation">✖</button>
+    </div>
+    <div class="header">
+        <h1>⚓ ECDIS Viewer</h1>
+        <div class="status-panel">
+            <div class="status-item">
+                <span class="status-label">Position</span>
+                <span class="status-value" id="position">---.---- N, ---.---- W</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Heading</span>
+                <span class="status-value" id="heading">---°</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Speed</span>
+                <span class="status-value" id="speed">-- kn</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Chart</span>
+                <span class="status-value" id="chart-name">Loading...</span>
+            </div>
+        </div>
+        <div class="vector-controls" style="display:flex;align-items:center;gap:6px;margin-left:20px;">
+            <span style="font-size:11px;color:#90caf9;letter-spacing:0.5px;">Vector</span>
+            <button id="vector-minus" style="background:#163b5f;border:1px solid #2d5a8c;color:#4fc3f7;padding:2px 8px;font-size:14px;cursor:pointer;border-radius:4px;">−</button>
+            <span id="vector-minutes-display" style="font-size:15px;font-weight:600;color:#fff;min-width:34px;text-align:center;">10m</span>
+            <button id="vector-plus" style="background:#163b5f;border:1px solid #2d5a8c;color:#4fc3f7;padding:2px 8px;font-size:14px;cursor:pointer;border-radius:4px;">+</button>
+        </div>
+        <div class="nav-controls" style="display:flex;align-items:center;gap:8px;margin-left:14px;">
+            <button id="center-ship" disabled style="background:#163b5f;border:1px solid #2d5a8c;color:#4fc3f7;padding:4px 10px;font-size:12px;cursor:pointer;border-radius:4px;opacity:0.8;">Center Ship</button>
+            <button id="fit-chart" style="background:#163b5f;border:1px solid #2d5a8c;color:#4fc3f7;padding:4px 10px;font-size:12px;cursor:pointer;border-radius:4px;">Fit Chart</button>
+            <button id="zoom-harbour" style="background:#163b5f;border:1px solid #2d5a8c;color:#4fc3f7;padding:4px 10px;font-size:12px;cursor:pointer;border-radius:4px;">Harbour</button>
+            <button id="zoom-approach" style="background:#163b5f;border:1px solid #2d5a8c;color:#4fc3f7;padding:4px 10px;font-size:12px;cursor:pointer;border-radius:4px;">Approach</button>
+            <button id="zoom-coastal" style="background:#163b5f;border:1px solid #2d5a8c;color:#4fc3f7;padding:4px 10px;font-size:12px;cursor:pointer;border-radius:4px;">Coastal</button>
+        </div>
+        <div class="layer-toggles">
+            <label><input type="checkbox" id="toggle-LNDARE" checked> Land</label>
+            <label><input type="checkbox" id="toggle-COALNE" checked> Coastline</label>
+            <label><input type="checkbox" id="toggle-DEPARE" checked> Depth Areas</label>
+            <label><input type="checkbox" id="toggle-DEPCNT" checked> Depth Contours</label>
+            <label><input type="checkbox" id="toggle-SLCONS"> Shore</label>
+            <label><input type="checkbox" id="toggle-BOYLAT"> Buoys</label>
+            <label><input type="checkbox" id="toggle-LIGHTS"> Lights</label>
+            <label><input type="checkbox" id="toggle-RANGERING"> Range ring</label>
+        </div>
+    </div>
+    
+    <div id="map"></div>
+
+    <!-- Depth Legend -->
+    <div class="legend-box" id="depth-legend">
+        <h4>Depth Areas</h4>
+        <div class="legend-item"><span class="legend-swatch" style="background:#b3d9ff;"></span><span>0–2 m (Very shallow)</span></div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#cfe9ff;"></span><span>2–5 m (Shallow)</span></div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#e6f4ff;"></span><span>5–10 m (Medium)</span></div>
+        <div class="legend-item"><span class="legend-swatch" style="background:#ffffff;"></span><span>> 10 m (Deep)</span></div>
+    </div>
+    
+    <div class="footer">
+        <span>Bridge Simulator Training Aid | NOAA ENC Chart Display</span>
+        <div class="cursor-info">
+            <span>LAT: <span id="cursor-lat-ecdis">---.----</span></span>
+            <span>LON: <span id="cursor-lon-ecdis">---.----</span></span>
+            <span>BRG: <span id="cursor-brg-ecdis">---°</span></span>
+            <span>RNG: <span id="cursor-rng-ecdis">--- NM</span></span>
+        </div>
+        <div class="connection-status">
+            <span id="connection-text">Connecting...</span>
+            <div class="connection-dot" id="connection-dot"></div>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS (local - works offline) -->
+    <script src="/static/leaflet.js"></script>
+    
+    <script>
+        // Identify this window and wire up ribbon navigation
+        try { window.name = window.name || 'ecdis_win'; } catch(e) {}
+        
+        // Enter fullscreen mode on load if it was previously active
+        document.addEventListener('DOMContentLoaded', () => {
+            const wasFullscreen = localStorage.getItem('viewer_fullscreen') === 'true';
+            if (wasFullscreen) {
+                localStorage.removeItem('viewer_fullscreen'); // Clear the flag
+                // Small delay to attempt fullscreen (may be blocked by browser security)
+                setTimeout(() => {
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(err => {
+                            console.log('Auto-fullscreen blocked - click fullscreen button to restore');
+                            // Flash the fullscreen button to indicate user should click it
+                            const btn = document.getElementById('nav-fullscreen');
+                            if (btn) {
+                                btn.style.animation = 'pulse 1s ease-in-out 3';
+                            }
+                        });
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.msRequestFullscreen) {
+                        elem.msRequestFullscreen();
+                    }
+                }, 100);
+            }
+        });
+        
+        (function(){
+            const go = (url) => { window.location.href = url; };
+            const id = (x) => document.getElementById(x);
+            
+            // Fullscreen toggle button
+            id('nav-fullscreen')?.addEventListener('click', ()=> {
+                if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+                    // Enter fullscreen
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(err => {
+                            console.log('Fullscreen request failed:', err);
+                        });
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.msRequestFullscreen) {
+                        elem.msRequestFullscreen();
+                    }
+                } else {
+                    // Exit fullscreen
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {});
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+            });
+            
+            id('nav-main')?.addEventListener('click', ()=> {
+                // Exit fullscreen before going to menu
+                localStorage.removeItem('viewer_fullscreen');
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                setTimeout(() => go('http://127.0.0.1:5001/'), 100);
+            });
+            id('nav-radar')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('http://127.0.0.1:5001/radar');
+            });
+            id('nav-ecdis')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('http://127.0.0.1:5000/');
+            });
+            id('nav-3d')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('http://127.0.0.1:5001/bridge3d');
+            });
+            id('nav-bridge')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('http://127.0.0.1:5001/bridge_controls');
+            });
+            id('nav-exit')?.addEventListener('click', ()=>{
+                // Confirm exit
+                if (!confirm('Exit simulation? This will stop the simulation and close all windows.')) {
+                    return;
+                }
+                // Exit fullscreen first
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                // Stop simulation first
+                localStorage.setItem('sim_running', 'false');
+                // Then broadcast exit signal to all windows
+                localStorage.setItem('sim_exit', Date.now().toString());
+                // Try to close this window
+                setTimeout(() => {
+                    window.close();
+                    // If window.close() doesn't work, navigate to menu
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5001/';
+                    }, 100);
+                }, 200);
+            });
+            
+            // Listen for exit broadcast from other windows
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'sim_exit' && e.newValue) {
+                    // Another window triggered exit - close this window
+                    window.close();
+                    // Fallback if close doesn't work
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5001/';
+                    }, 100);
+                }
+            });
+        })();
+    </script>
+    
+    <script>
+        // Restore saved view or use default coastal view
+        let savedView = null;
+        try {
+            const saved = localStorage.getItem('ecdis_view');
+            if (saved) {
+                savedView = JSON.parse(saved);
+                console.log('Restored ECDIS view:', savedView);
+            } else {
+                console.log('No saved ECDIS view - using default coastal view');
+            }
+        } catch(e) {
+            console.warn('Failed to restore ECDIS view:', e);
+        }
+        
+        // Initialize map - use saved view if available, otherwise default coastal zoom
+        const map = L.map('map', {
+            center: savedView ? [savedView.lat, savedView.lng] : [38.13, -75.93],
+            zoom: savedView ? savedView.zoom : 11,
+            zoomControl: false,  // Disable default (top-left) zoom control
+            attributionControl: false
+        });
+        
+        // Add zoom control on the right side
+        L.control.zoom({
+            position: 'topright'
+        }).addTo(map);
+        
+        console.log('Map initialized at:', map.getCenter(), 'zoom:', map.getZoom());
+        
+        // Save view whenever user moves or zooms
+        function saveCurrentView() {
+            const center = map.getCenter();
+            const zoom = map.getZoom();
+            const viewData = {
+                lat: center.lat,
+                lng: center.lng,
+                zoom: zoom
+            };
+            localStorage.setItem('ecdis_view', JSON.stringify(viewData));
+            console.log('Saved ECDIS view:', viewData);
+        }
+        
+        // Listen to map events to save view
+        map.on('moveend', saveCurrentView);
+        map.on('zoomend', saveCurrentView);
+        
+        // Removed dark tile layer to show white water background (blank chart underlay)
+        
+    // ENC layers and ship graphics
+    let encLayers = {};
+    let shipShape = null;      // polygon outline for ship
+    let courseLine = null;     // projected course line (10 minutes)
+    let shipPath = [];
+    let shipTrail = null;      // past track polyline
+    let shipDataLatest = null; // store last ship update for vector recalculation
+    let rangeRing = null;      // 1 NM range ring
+        
+        // Projection minutes (editable): length of course vector ahead
+        let projectionMinutes = 10; // change this value to adjust future vector
+        
+        // Layer styles
+        const layerStyles = {
+            // BA palette approximation
+            'LNDARE': { color: '#c2a574', fillColor: '#f2e3b6', fillOpacity: 0.65, weight: 0.8 }, // buff land
+            'COALNE': { color: '#000000', weight: 2, fillOpacity: 0 }, // coastline black
+            'DEPCNT': { color: '#1e88e5', weight: 1, fillOpacity: 0 }, // depth contours blue
+            'SLCONS': { color: '#333333', weight: 2, fillOpacity: 0 }, // shoreline constructions dark
+            'BOYLAT': { color: '#666666', fillColor: '#666666', fillOpacity: 0.9, radius: 2 }, // will override per-colour
+            'LIGHTS': { color: '#d81b60', fillColor: '#d81b60', fillOpacity: 1.0, radius: 2 } // magenta lights
+        };
+        
+    let chartBounds = null; // will hold overall ENC bounds
+
+    // Load ENC GeoJSON (with size guard to avoid browser OOM on huge exports)
+        async function loadENCChart() {
+            const MAX_BYTES = 150 * 1024 * 1024; // Soft guardrail; allow large ENC (~150 MB)
+            try {
+                // HEAD check for content length before fetching full GeoJSON
+                const headResp = await fetch('/chart_export.geojson', { method: 'HEAD' });
+                const lenHeader = headResp.headers.get('content-length');
+                if (lenHeader) {
+                    const size = parseInt(lenHeader, 10);
+                    if (!isNaN(size) && size > MAX_BYTES) {
+                        console.warn(`Chart export is very large (${(size/1024/1024).toFixed(1)} MB); attempting load may be slow.`);
+                    }
+                }
+
+                const response = await fetch('/chart_export.geojson');
+                const geojson = await response.json();
+                
+                if (!geojson.features || geojson.features.length === 0) {
+                    console.warn('No features in GeoJSON');
+                    document.getElementById('chart-name').textContent = 'No chart data';
+                    return;
+                }
+                
+                // Group features by layer
+                const layers = {};
+                geojson.features.forEach(feature => {
+                    const layerName = feature.properties.layer || 'UNKNOWN';
+                    if (!layers[layerName]) {
+                        layers[layerName] = [];
+                    }
+                    layers[layerName].push(feature);
+                });
+                
+                // Render each layer
+                const layerOrder = ['LNDARE', 'DEPARE', 'DEPCNT', 'SLCONS', 'COALNE', 'BOYLAT', 'LIGHTS'];
+                
+                layerOrder.forEach(layerName => {
+                    if (!layers[layerName]) return;
+                    
+                    const baseStyle = layerStyles[layerName] || { color: '#666', weight: 1 };
+                    
+                    const layer = L.geoJSON(layers[layerName], {
+                        style: feature => {
+                            if (layerName === 'DEPARE') {
+                                // BA-style depth area fills by DRVAL2 thresholds
+                                const p = feature.properties || {};
+                                const d2 = typeof p.DRVAL2 === 'number' ? p.DRVAL2 : (parseFloat(p.DRVAL2) || null);
+                                let fill = '#ffffff'; // deep water white
+                                if (d2 != null) {
+                                    if (d2 <= 2) fill = '#b3d9ff';       // very shallow
+                                    else if (d2 <= 5) fill = '#cfe9ff';  // shallow
+                                    else if (d2 <= 10) fill = '#e6f4ff'; // medium
+                                    else fill = '#ffffff';               // deep
+                                }
+                                return { color: '#1e88e5', weight: 0.5, fillColor: fill, fillOpacity: 0.7 };
+                            }
+                            if (layerName === 'DEPCNT') {
+                                const p = feature.properties || {};
+                                const v = typeof p.VALDCO === 'number' ? p.VALDCO : (parseFloat(p.VALDCO) || null);
+                                let weight = 1, dashArray = null;
+                                if (v != null) {
+                                    if (Math.abs(v - 5) < 1e-6) { weight = 2; }
+                                    else if (Math.abs(v - 10) < 1e-6) { weight = 1.5; dashArray = '4,3'; }
+                                    else if (Math.abs(v - 20) < 1e-6) { weight = 1; dashArray = '6,4'; }
+                                }
+                                return { color: '#1e88e5', weight, dashArray };
+                            }
+                            return baseStyle;
+                        },
+                        pointToLayer: (feature, latlng) => {
+                            // Buoys as SVG div icons colored by COLOUR attribute
+                            if (layerName === 'BOYLAT') {
+                                const p = feature.properties || {};
+                                const colours = ([]).concat(p.COLOUR || p.COLOUR1 || []).flat();
+                                let color = '#666666';
+                                let shape = 'circle';
+                                if (colours.includes(2) || /\b2\b/.test(String(colours))) { color = '#d32f2f'; shape = 'triangle'; }
+                                else if (colours.includes(3) || /\b3\b/.test(String(colours))) { color = '#2e7d32'; shape = 'square'; }
+                                else if (colours.includes(5) || /\b5\b/.test(String(colours))) { color = '#f9a825'; shape = 'circle'; }
+                                const html = shape === 'triangle'
+                                    ? `<svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10" fill="${color}" stroke="#000" stroke-width="0.5"/></svg>`
+                                    : shape === 'square'
+                                        ? `<svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" fill="${color}" stroke="#000" stroke-width="0.5"/></svg>`
+                                        : `<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="${color}" stroke="#000" stroke-width="0.5"/></svg>`;
+                                const icon = L.divIcon({ html, className: '', iconSize: [10,10], iconAnchor: [5,5] });
+                                return L.marker(latlng, { icon });
+                            }
+                            if (layerName === 'LIGHTS') {
+                                return L.circleMarker(latlng, { color: '#d81b60', fillColor: '#d81b60', radius: 2.5, weight: 1, fillOpacity: 1 });
+                            }
+                            return L.circleMarker(latlng, baseStyle);
+                        }
+                    });
+                    
+                    encLayers[layerName] = layer;
+                });
+
+                // Apply initial visibility from toggles
+                ['LNDARE','COALNE','DEPARE','DEPCNT','SLCONS','BOYLAT','LIGHTS'].forEach(name => {
+                    const cb = document.getElementById(`toggle-${name}`);
+                    if (cb) setLayerVisibility(name, cb.checked);
+                });
+                
+                // Fit map to chart bounds only on first load (no saved view)
+                const allLayers = Object.values(encLayers);
+                if (allLayers.length > 0) {
+                    const group = L.featureGroup(allLayers);
+                    chartBounds = group.getBounds();
+                    
+                    // Only auto-fit if no saved view exists
+                    if (!savedView) {
+                        map.fitBounds(chartBounds, { padding: [50, 50] });
+                        // Save this initial coastal view
+                        saveCurrentView();
+                    }
+                }
+                
+                // Update chart name
+                const chartName = geojson.features[0]?.properties?.chart_name || 'US4MD20M';
+                document.getElementById('chart-name').textContent = chartName;
+                
+                console.log(`Loaded ${geojson.features.length} features from ${Object.keys(layers).length} layers`);
+                
+            } catch (error) {
+                console.error('Failed to load chart:', error);
+                document.getElementById('chart-name').textContent = 'Load failed';
+            }
+        }
+
+        // Show/hide ENC layers
+        function setLayerVisibility(name, visible) {
+            const layer = encLayers[name];
+            if (!layer) return;
+            if (visible) {
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layer);
+            }
+        }
+        
+        // Helper: offset in NM by heading (deg)
+        function offsetPoint(lat, lon, headingDeg, nm = 0.3) {
+            const rad = headingDeg * Math.PI / 180;
+            // 1 NM ~= 1/60 deg latitude
+            const dLat = (nm / 60) * Math.cos(rad);
+            const dLon = (nm / 60) * Math.sin(rad) / Math.cos(lat * Math.PI / 180);
+            return [lat + dLat, lon + dLon];
+        }
+
+        // Build ship polygon (simple triangle bow + two stern points)
+        function shipPolygon(lat, lon, headingDeg) {
+            // Dimensions in NM (scaled up 3x for better visibility)
+            const halfBeam = 0.20; // width/2
+            const length = 0.48;   // bow length
+            // Bow point
+            const bow = offsetPoint(lat, lon, headingDeg, length);
+            // Stern port/starboard (180 + / - )
+            const sternPort = offsetPoint(lat, lon, headingDeg + 180 + 30, halfBeam);
+            const sternStar = offsetPoint(lat, lon, headingDeg + 180 - 30, halfBeam);
+            return [bow, sternPort, [lat, lon], sternStar];
+        }
+
+        // Update ship position
+        function updateShip(data) {
+            const { lat, lon, heading, speed } = data;
+            shipDataLatest = data; // keep latest
+            
+            // Update status display
+            const latDir = lat >= 0 ? 'N' : 'S';
+            const lonDir = lon >= 0 ? 'E' : 'W';
+            document.getElementById('position').textContent = 
+                `${Math.abs(lat).toFixed(4)}° ${latDir}, ${Math.abs(lon).toFixed(4)}° ${lonDir}`;
+            document.getElementById('heading').textContent = `${heading.toFixed(1)}°`;
+            document.getElementById('speed').textContent = `${speed.toFixed(1)} kn`;
+            
+            // Update or create ship marker
+            if (!shipShape) {
+                shipShape = L.polygon(shipPolygon(lat, lon, heading), { color: '#000', weight: 4, fill: false }).addTo(map);
+                shipShape.bindTooltip('', { permanent: true, direction: 'top', className: 'ship-label' });
+                shipShape.bringToFront?.();
+            } else {
+                shipShape.setLatLngs(shipPolygon(lat, lon, heading));
+                shipShape.setStyle({ weight: 4 });
+                shipShape.bringToFront?.();
+            }
+
+            // Projected course line (projectionMinutes ahead)
+            const projNm = speed * (projectionMinutes / 60);
+            const projEnd = speed > 0.05 ? offsetPoint(lat, lon, heading, projNm) : [lat, lon];
+            if (!courseLine) {
+                courseLine = L.polyline([[lat, lon], projEnd], { color: '#000000', weight: 2, opacity: 0.8 }).addTo(map);
+            } else {
+                courseLine.setLatLngs([[lat, lon], projEnd]);
+            }
+            courseLine.bringToFront?.();
+
+            // Update ship label (HDG/SPD + projection time)
+            const tooltip = shipShape.getTooltip && shipShape.getTooltip();
+            if (tooltip) {
+                tooltip.setContent(`SHIP • HDG ${heading.toFixed(0)}° • SPD ${speed.toFixed(1)} kn • +${projectionMinutes}m`);
+            }
+
+            // Enable Center Ship button once we have data
+            const centerBtn = document.getElementById('center-ship');
+            if (centerBtn && centerBtn.disabled) centerBtn.disabled = false;
+            
+            // Add to ship trail (avoid duplicates when refreshing vector only)
+            const lastPt = shipPath.length ? shipPath[shipPath.length - 1] : null;
+            if (!lastPt || Math.abs(lastPt[0] - lat) > 1e-9 || Math.abs(lastPt[1] - lon) > 1e-9) {
+                shipPath.push([lat, lon]);
+            }
+            if (shipPath.length > 100) {
+                shipPath.shift();
+            }
+            
+            if (shipTrail) {
+                map.removeLayer(shipTrail);
+            }
+            
+            if (shipPath.length > 1) {
+                shipTrail = L.polyline(shipPath, {
+                    color: '#000000',
+                    weight: 2,
+                    opacity: 0.6
+                }).addTo(map);
+            }
+
+            // Range ring handling
+            const ringEnabled = document.getElementById('toggle-RANGERING')?.checked;
+            if (rangeRing) {
+                map.removeLayer(rangeRing);
+                rangeRing = null;
+            }
+            if (ringEnabled) {
+                // 1 NM in degrees latitude ~ 1/60
+                const latRadiusDeg = 1/60;
+                const lonRadiusDeg = latRadiusDeg / Math.cos(lat * Math.PI/180);
+                const pts = [];
+                for (let i=0;i<128;i++) {
+                    const ang = (i/128)*2*Math.PI;
+                    const plat = lat + latRadiusDeg * Math.cos(ang);
+                    const plon = lon + lonRadiusDeg * Math.sin(ang);
+                    pts.push([plat, plon]);
+                }
+                rangeRing = L.polygon(pts, { color: '#000', weight: 1, dashArray: '4,4', fill: false }).addTo(map);
+                rangeRing.bringToFront?.();
+            }
+        }
+        
+    // WebSocket connection for live ship updates
+        let ws = null;
+        let reconnectInterval = null;
+    let pollTimer = null;
+    let lastUpdateTs = 0;
+        
+        function connectWebSocket() {
+            const wsUrl = `ws://${window.location.hostname}:${window.location.port}/ws`;
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                document.getElementById('connection-text').textContent = 'Connected';
+                document.getElementById('connection-dot').classList.add('connected');
+                if (reconnectInterval) {
+                    clearInterval(reconnectInterval);
+                    reconnectInterval = null;
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'ship_update') {
+                        lastUpdateTs = Date.now();
+                        updateShip(data);
+                    }
+                } catch (error) {
+                    console.error('Failed to parse WebSocket message:', error);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                document.getElementById('connection-text').textContent = 'Disconnected';
+                document.getElementById('connection-dot').classList.remove('connected');
+                
+                // Attempt reconnect
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(() => {
+                        console.log('Attempting to reconnect...');
+                        connectWebSocket();
+                    }, 3000);
+                }
+            };
+        }
+        
+        // No custom rotation needed when using circle marker + heading line
+        
+        // Initialize
+        loadENCChart();
+        connectWebSocket();
+        // Fetch initial state and start a light polling fallback
+        function fetchShipOnce() {
+            fetch('/api/ship').then(r => r.json()).then(state => {
+                if (state && typeof state.lat === 'number' && typeof state.lon === 'number') {
+                    updateShip({ type: 'ship_update', ...state });
+                }
+            }).catch(() => {});
+        }
+        fetchShipOnce();
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+            // If no websocket update in the last 3 seconds, poll REST
+            if (Date.now() - lastUpdateTs > 3000) {
+                fetchShipOnce();
+            }
+        }, 2000);
+
+        // Vector control handlers
+        function applyProjectionChange(delta) {
+            projectionMinutes = Math.min(240, Math.max(1, projectionMinutes + delta));
+            document.getElementById('vector-minutes-display').textContent = projectionMinutes + 'm';
+            // Recompute course line & tooltip if we have ship data
+            if (shipDataLatest) {
+                updateShip(shipDataLatest); // triggers recompute
+            }
+        }
+        document.getElementById('vector-minus').addEventListener('click', () => applyProjectionChange(-1));
+        document.getElementById('vector-plus').addEventListener('click', () => applyProjectionChange(+1));
+        document.getElementById('vector-minutes-display').textContent = projectionMinutes + 'm';
+
+        // Navigation button handlers
+        document.getElementById('center-ship').addEventListener('click', () => {
+            if (!shipDataLatest) return;
+            const { lat, lon } = shipDataLatest;
+            map.setView([lat, lon], map.getZoom(), { animate: true });
+        });
+        document.getElementById('fit-chart').addEventListener('click', () => {
+            if (chartBounds) {
+                map.fitBounds(chartBounds, { padding: [50, 50] });
+            }
+        });
+
+        // Zoom presets approximate scales
+        function applyZoomPreset(type) {
+            if (!chartBounds) return;
+            const center = chartBounds.getCenter();
+            const spanLat = Math.abs(chartBounds.getNorth() - chartBounds.getSouth());
+            const base = spanLat < 0.1 ? 13 : spanLat < 0.3 ? 12 : spanLat < 0.6 ? 11 : 10;
+            let zoom = base;
+            if (type === 'harbour') zoom = base + 2;
+            else if (type === 'approach') zoom = base + 1;
+            map.setView(center, zoom, { animate: true });
+        }
+        document.getElementById('zoom-harbour').addEventListener('click', () => applyZoomPreset('harbour'));
+        document.getElementById('zoom-approach').addEventListener('click', () => applyZoomPreset('approach'));
+        document.getElementById('zoom-coastal').addEventListener('click', () => applyZoomPreset('coastal'));
+
+        // Wire up toggles
+        ['LNDARE','COALNE','DEPARE','DEPCNT','SLCONS','BOYLAT','LIGHTS','RANGERING'].forEach(name => {
+            const cb = document.getElementById(`toggle-${name}`);
+            if (!cb) return;
+            cb.addEventListener('change', () => {
+                if (name === 'RANGERING') {
+                    // force redraw of ring
+                    if (shipDataLatest) updateShip(shipDataLatest);
+                } else {
+                    setLayerVisibility(name, cb.checked);
+                }
+            });
+        });
+
+        // Cursor tracking on map
+        map.on('mousemove', (e) => {
+            const cursorLat = e.latlng.lat;
+            const cursorLon = e.latlng.lng;
+            
+            // Format lat/lon
+            const fmtLat = (Math.abs(cursorLat).toFixed(4) + ' ' + (cursorLat >= 0 ? 'N' : 'S'));
+            const fmtLon = (Math.abs(cursorLon).toFixed(4) + ' ' + (cursorLon >= 0 ? 'E' : 'W'));
+            
+            document.getElementById('cursor-lat-ecdis').textContent = fmtLat;
+            document.getElementById('cursor-lon-ecdis').textContent = fmtLon;
+            
+            // Compute range/bearing from ship if available
+            if (shipDataLatest && typeof shipDataLatest.lat === 'number' && typeof shipDataLatest.lon === 'number') {
+                const shipLat = shipDataLatest.lat;
+                const shipLon = shipDataLatest.lon;
+                
+                // Bearing calculation (simple great circle approx)
+                const dLon = (cursorLon - shipLon) * Math.PI / 180;
+                const lat1 = shipLat * Math.PI / 180;
+                const lat2 = cursorLat * Math.PI / 180;
+                const y = Math.sin(dLon) * Math.cos(lat2);
+                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+                let brg = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+                
+                // Range calculation (haversine formula) in NM
+                const R = 3440.065; // Earth radius in NM
+                const dLat = lat2 - lat1;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                          Math.cos(lat1) * Math.cos(lat2) *
+                          Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                const rng = R * c;
+                
+                document.getElementById('cursor-brg-ecdis').textContent = brg.toFixed(1) + '°';
+                document.getElementById('cursor-rng-ecdis').textContent = rng.toFixed(2) + ' NM';
+            } else {
+                document.getElementById('cursor-brg-ecdis').textContent = '---°';
+                document.getElementById('cursor-rng-ecdis').textContent = '--- NM';
+            }
+        });
+    </script>
+</body>
+</html>

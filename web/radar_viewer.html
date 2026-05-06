@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marine Radar Display</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            overflow: hidden;
+        }
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        #radar-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #radar-canvas {
+            background: #000;
+            cursor: crosshair;
+            border: 2px solid #0a0;
+        }
+        #controls {
+            width: 280px;
+            background: #2a2a2a;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 2px solid #444;
+        }
+        .control-group {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #444;
+        }
+        .control-group:last-child { border-bottom: none; }
+        h3 {
+            font-size: 14px;
+            color: #00ff00;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        button {
+            flex: 1;
+            padding: 10px;
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        button:hover { background: #444; border-color: #00ff00; }
+        button:active { background: #555; }
+        button.active {
+            background: #00aa00;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0,255,0,0.3);
+        }
+        .slider-container {
+            margin: 10px 0;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #444;
+            outline: none;
+            border-radius: 3px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #00ff00;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #00ff00;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        .status-bar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .status-bar div {
+            margin: 3px 0;
+        }
+        .status-bar .label {
+            color: #00ff00;
+            display: inline-block;
+            width: 80px;
+        }
+        .alarm-banner {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,0,0,0.15);
+            color: #ff4444;
+            border: 1px solid #ff4444;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            display: none;
+        }
+        .alarm-banner.visible { display: block; animation: blink 1s step-start 0s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        .info-panel {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #0f0;
+        }
+        .info-panel .alert { color: #ff6666; font-weight: bold; }
+        .cursor-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px; /* move to left side */
+            background: rgba(0,0,0,0.7);
+            padding: 8px 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #0f0;
+        }
+        .target-info {
+            position: absolute;
+            top: 120px;
+            right: 10px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #0ff;
+            border: 1px solid #0ff;
+            min-width: 200px;
+            display: none;
+        }
+        .target-info.visible { display: block; }
+        .target-info .header {
+            color: #0f0;
+            font-weight: bold;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #0ff;
+            padding-bottom: 5px;
+        }
+        .target-info .data-row {
+            margin: 3px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .target-info .label { color: #aaa; }
+        .target-info .value { color: #0ff; font-weight: bold; }
+        .arpa-controls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        .arpa-controls button {
+            width: 100%;
+            margin-bottom: 5px;
+            padding: 8px;
+            font-size: 11px;
+        }
+        /* Tiny left ribbon for navigation - auto-hide */
+        .side-ribbon {
+            position: fixed;
+            top: 12px;
+            left: -36px; /* Hidden by default */
+            width: 44px;
+            padding: 6px;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid #0f0;
+            border-radius: 0 8px 8px 0;
+            border-left: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 3000;
+            backdrop-filter: blur(2px);
+            transition: left 0.3s ease;
+        }
+        .side-ribbon:hover {
+            left: 0; /* Slide in on hover */
+        }
+        .side-ribbon::after {
+            content: '▶';
+            position: absolute;
+            right: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 40px;
+            background: rgba(0,0,0,0.85);
+            border: 1px solid #0f0;
+            border-left: none;
+            border-radius: 0 6px 6px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #0f0;
+            cursor: pointer;
+        }
+        .side-ribbon:hover::after {
+            content: '◀';
+        }
+        .ribbon-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            margin: 0;
+            border-radius: 6px;
+            background: #222;
+            color: #0f0;
+            border: 1px solid #0a0;
+            font-size: 16px;
+            line-height: 32px;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background .2s, border-color .2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ribbon-btn:hover { background:#2b2b2b; border-color:#0f0; }
+        .ribbon-btn.exit { color:#ff6666; border-color:#a00; }
+        .ribbon-btn.fullscreen { color:#ffaa00; border-color:#aa6600; }
+    </style>
+</head>
+<body>
+    <!-- Navigation ribbon (small, non-intrusive) -->
+    <div class="side-ribbon" aria-label="Navigation">
+        <button class="ribbon-btn" id="nav-main" title="Go to Main Menu">🏠</button>
+        <button class="ribbon-btn fullscreen" id="nav-fullscreen" title="Toggle Fullscreen">⛶</button>
+        <button class="ribbon-btn" id="nav-radar" title="Go to Radar">📡</button>
+        <button class="ribbon-btn" id="nav-ecdis" title="Go to ECDIS">🗺️</button>
+        <button class="ribbon-btn" id="nav-3d" title="Go to 3D Bridge View">🌉</button>
+        <button class="ribbon-btn" id="nav-bridge" title="Go to Bridge Controls">⚙️</button>
+        <button class="ribbon-btn exit" id="nav-exit" title="Exit Simulation">✖</button>
+    </div>
+    <div id="container">
+        <div id="radar-container">
+            <canvas id="radar-canvas" width="600" height="600"></canvas>
+            <div class="status-bar">
+                <div><span class="label">RANGE:</span><span id="range-display">12 NM</span></div>
+                <div><span class="label">MODE:</span><span id="mode-display">NORTH UP</span></div>
+                <div><span class="label">MOTION:</span><span id="motion-display">RM</span></div>
+                <div><span class="label">LAT:</span><span id="ship-lat-display">---.----</span></div>
+                <div><span class="label">LON:</span><span id="ship-lon-display">---.----</span></div>
+                <div><span class="label">HDG:</span><span id="hdg-display">000°</span></div>
+                <div><span class="label">SPD:</span><span id="spd-display">0.0 kn</span></div>
+            </div>
+            <div id="alarm-banner" class="alarm-banner">GUARD ZONE ALARM</div>
+            <div id="cpa-banner" class="alarm-banner" style="right: 220px;">CPA/TCPA ALARM</div>
+            <div class="info-panel">
+                <div>EBL: <span id="ebl-value">OFF</span></div>
+                <div>VRM: <span id="vrm-value">OFF</span></div>
+                <div>EBL2: <span id="ebl2-value">OFF</span></div>
+                <div>VRM2: <span id="vrm2-value">OFF</span></div>
+            </div>
+            <div class="cursor-panel">
+                <div>CRSR LAT: <span id="cursor-lat">--.--</span></div>
+                <div>CRSR LON: <span id="cursor-lon">--.--</span></div>
+                <div>CRSR BRG: <span id="cursor-brg">---°</span></div>
+                <div>CRSR RNG: <span id="cursor-rng">--- NM</span></div>
+            </div>
+            <div class="target-info" id="target-info">
+                <div class="header">TARGET ACQUISITION</div>
+                <div class="data-row">
+                    <span class="label">BRG:</span>
+                    <span class="value" id="tgt-brg">---°</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">RNG:</span>
+                    <span class="value" id="tgt-rng">--- NM</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">CRS:</span>
+                    <span class="value" id="tgt-crs">---°</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">SPD:</span>
+                    <span class="value" id="tgt-spd">--- kn</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">CPA:</span>
+                    <span class="value" id="tgt-cpa">--- NM</span>
+                </div>
+                <div class="data-row">
+                    <span class="label">TCPA:</span>
+                    <span class="value" id="tgt-tcpa">--- min</span>
+                </div>
+                <div class="arpa-controls">
+                    <button id="acquire-btn" class="active">ACQUIRED</button>
+                    <button id="cancel-acq-btn">CANCEL</button>
+                </div>
+            </div>
+        </div>
+        <div id="controls">
+            <div class="control-group">
+                <h3>Range Control</h3>
+                <div class="btn-group">
+                    <button id="range-dec">-</button>
+                    <button id="range-inc">+</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Display Mode</h3>
+                <button id="mode-btn" style="width: 100%; margin-bottom: 8px;">NORTH UP</button>
+                <button id="motion-btn" style="width: 100%;">RELATIVE MOTION</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Gain</h3>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>GAIN</span>
+                        <span id="gain-value">30</span>
+                    </div>
+                    <input type="range" id="gain-slider" min="0" max="100" value="30">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Clutter Suppression</h3>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>SEA</span>
+                        <span id="sea-value">0</span>
+                    </div>
+                    <input type="range" id="sea-slider" min="0" max="100" value="0">
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>RAIN</span>
+                        <span id="rain-value">5</span>
+                    </div>
+                    <input type="range" id="rain-slider" min="0" max="100" value="5">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Position Control</h3>
+                <div class="btn-group">
+                    <button id="offset-btn">OFF CENTRE</button>
+                    <button id="center-btn">CENTRE</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Display Options</h3>
+                <button id="rings-btn" style="width: 100%; margin-bottom: 8px;">RANGE RINGS</button>
+                <button id="tx-btn" style="width: 100%;" class="active">TX ON</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Measurements</h3>
+                <div class="btn-group">
+                    <button id="ebl-btn">EBL</button>
+                    <button id="vrm-btn">VRM</button>
+                </div>
+                <div class="btn-group" style="margin-top: 8px;">
+                    <button id="ebl-minus">EBL -</button>
+                    <button id="ebl-plus">EBL +</button>
+                </div>
+                <div class="btn-group" style="margin-top: 4px;">
+                    <button id="vrm-minus">VRM -</button>
+                    <button id="vrm-plus">VRM +</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>ARPA Functions</h3>
+                <button id="acquire-mode-btn" style="width: 100%; margin-bottom: 8px;">ACQUIRE TARGET</button>
+                <button id="clear-tracks-btn" style="width: 100%; margin-bottom: 8px;">CLEAR ALL TRACKS</button>
+                <button id="vector-stab-btn" style="width: 100%;">VECT GND</button>
+            </div>
+            <div class="control-group">
+                <h3>CPA/TCPA Alarm</h3>
+                <button id="cpa-ack-btn" style="width: 100%;">ACK CPA/TCPA ALARM</button>
+                <div class="slider-container" style="margin-top: 10px;">
+                    <div class="slider-label">
+                        <span>CPA (NM)</span>
+                        <input id="cpa-thr-nm" type="number" min="0.1" max="5" step="0.1" value="0.5" 
+                               style="width: 80px; text-align: right; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px; padding: 4px;">
+                    </div>
+                    <div class="slider-label" style="margin-top: 6px;">
+                        <span>TCPA (min)</span>
+                        <input id="cpa-thr-tcpa" type="number" min="1" max="60" step="1" value="15" 
+                               style="width: 80px; text-align: right; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px; padding: 4px;">
+                    </div>
+                </div>
+            </div>
+            <div class="control-group">
+                <h3>Vectors & Trails</h3>
+                <div class="btn-group">
+                    <button id="vector-time-btn">VECT 6 min</button>
+                    <button id="trails-btn">TRAILS OFF</button>
+                </div>
+                <button id="vector-stab-btn" style="width: 100%; margin-top: 8px;">VECT GND</button>
+            </div>
+            <div class="control-group">
+                <h3>Guard Zone</h3>
+                <div class="btn-group">
+                    <button id="guard-toggle-btn">GUARD OFF</button>
+                    <button id="guard-edit-btn">EDIT</button>
+                </div>
+                <button id="guard-ack-btn" style="width: 100%; margin-top: 8px;">ACK ALARM</button>
+            </div>
+            <div class="control-group">
+                <h3>Auto Acquire</h3>
+                <div class="btn-group">
+                    <button id="aa-toggle-btn">AUTO ACQ OFF</button>
+                    <button id="aa-edit-btn">EDIT</button>
+                </div>
+            </div>
+            <div class="control-group">
+                <h3>Measurements 2</h3>
+                <div class="btn-group">
+                    <button id="ebl2-btn">EBL2</button>
+                    <button id="vrm2-btn">VRM2</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Identify this window for potential coordination
+        try { window.name = window.name || 'radar_win'; } catch(e) {}
+
+        // Enter fullscreen mode on load if it was previously active
+        document.addEventListener('DOMContentLoaded', () => {
+            const wasFullscreen = localStorage.getItem('viewer_fullscreen') === 'true';
+            if (wasFullscreen) {
+                localStorage.removeItem('viewer_fullscreen'); // Clear the flag
+                // Small delay to attempt fullscreen (may be blocked by browser security)
+                setTimeout(() => {
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(err => {
+                            console.log('Auto-fullscreen blocked - click fullscreen button to restore');
+                            // Flash the fullscreen button to indicate user should click it
+                            const btn = document.getElementById('nav-fullscreen');
+                            if (btn) {
+                                btn.style.animation = 'pulse 1s ease-in-out 3';
+                            }
+                        });
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.msRequestFullscreen) {
+                        elem.msRequestFullscreen();
+                    }
+                }, 100);
+            }
+        });
+
+        // Ribbon navigation handlers
+        (function(){
+            const go = (url) => { window.location.href = url; };
+            const byId = (id) => document.getElementById(id);
+            
+            // Fullscreen toggle button
+            byId('nav-fullscreen')?.addEventListener('click', ()=> {
+                if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+                    // Enter fullscreen
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(err => {
+                            console.log('Fullscreen request failed:', err);
+                        });
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.msRequestFullscreen) {
+                        elem.msRequestFullscreen();
+                    }
+                } else {
+                    // Exit fullscreen
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {});
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+            });
+            
+            byId('nav-main')?.addEventListener('click', ()=> {
+                // Exit fullscreen before going to menu
+                localStorage.removeItem('viewer_fullscreen');
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                setTimeout(() => go('http://127.0.0.1:5001/'), 100);
+            });
+            byId('nav-radar')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('/radar');
+            });
+            byId('nav-ecdis')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('http://127.0.0.1:5000/');
+            });
+            byId('nav-3d')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('/bridge3d');
+            });
+            byId('nav-bridge')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('/bridge_controls');
+            });
+            byId('nav-exit')?.addEventListener('click', ()=>{
+                // Confirm exit
+                if (!confirm('Exit simulation? This will stop the simulation and close all windows.')) {
+                    return;
+                }
+                // Exit fullscreen first
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                // Stop simulation first
+                localStorage.setItem('sim_running', 'false');
+                // Then broadcast exit signal to all windows
+                localStorage.setItem('sim_exit', Date.now().toString());
+                // Try to close this window
+                setTimeout(() => {
+                    window.close();
+                    // If window.close() doesn't work, navigate to menu
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5001/';
+                    }, 100);
+                }, 200);
+            });
+            
+            // Listen for exit broadcast from other windows
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'sim_exit' && e.newValue) {
+                    // Another window triggered exit - close this window
+                    window.close();
+                    // Fallback if close doesn't work
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5001/';
+                    }, 100);
+                }
+            });
+        })();
+
+        const canvas = document.getElementById('radar-canvas');
+        const ctx = canvas.getContext('2d');
+        let ws = null;
+        let reconnectTimer = null;
+
+        // WebSocket connection with auto-reconnect
+        function connectWebSocket() {
+            if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+                return; // Already connected or connecting
+            }
+            
+            console.log('Connecting to WebSocket...');
+            ws = new WebSocket('ws://127.0.0.1:5001/radar');
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
+                // Force SEA to 0 on connection
+                setTimeout(() => {
+                    sendCommand('set_sea', 0);
+                    console.log('Set SEA to 0 on connection');
+                }, 100);
+            };
+            
+            ws.onmessage = (event) => {
+                // WebSocket is only used for commands now, not for state updates
+                // State updates come from fetchRadarState() polling
+                console.log('[WS] Received message (ignoring, using REST polling):', event.data);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket closed, will reconnect in 2 seconds...');
+                reconnectTimer = setTimeout(connectWebSocket, 2000);
+            };
+        }
+        
+        // Initial connection
+        connectWebSocket();
+
+        // Land echo canvas (pre-rendered)
+        let landCanvas = null;
+        let landCtx = null;
+        let landFeatures = [];
+        let landBounds = { minLat: 0, maxLat: 0, minLon: 0, maxLon: 0 };
+        
+        // Load and render land features
+        async function loadLandEchoes() {
+            try {
+                const response = await fetch('/api/chart_features');
+                const data = await response.json();
+                if (data.status !== 'ok') {
+                    console.warn('[LAND] Failed to load chart features:', data.message);
+                    return;
+                }
+                
+                landFeatures = data.features || [];
+                console.log(`[LAND] Loaded ${landFeatures.length} land features`);
+                
+                if (landFeatures.length === 0) return;
+                
+                // Calculate bounds of all land features
+                landBounds = { minLat: 90, maxLat: -90, minLon: 180, maxLon: -180 };
+                for (const feature of landFeatures) {
+                    const coords = feature.coordinates;
+                    traverseCoords(coords, (lon, lat) => {
+                        if (lat < landBounds.minLat) landBounds.minLat = lat;
+                        if (lat > landBounds.maxLat) landBounds.maxLat = lat;
+                        if (lon < landBounds.minLon) landBounds.minLon = lon;
+                        if (lon > landBounds.maxLon) landBounds.maxLon = lon;
+                    });
+                }
+                
+                console.log('[LAND] Bounds:', landBounds);
+                
+                // Create large canvas for pre-rendering land
+                const size = 4000; // Large enough for detailed land
+                landCanvas = document.createElement('canvas');
+                landCanvas.width = size;
+                landCanvas.height = size;
+                landCtx = landCanvas.getContext('2d');
+                
+                // Render all land features to canvas in yellow
+                landCtx.fillStyle = 'rgba(255, 255, 0, 0.85)';
+                landCtx.strokeStyle = 'rgba(255, 255, 0, 0.85)';
+                landCtx.lineWidth = 2;
+                
+                for (const feature of landFeatures) {
+                    renderLandFeature(feature);
+                }
+                
+                console.log('[LAND] Pre-rendered land echoes to canvas');
+            } catch (err) {
+                console.error('[LAND] Error loading land echoes:', err);
+            }
+        }
+        
+        // Traverse coordinates recursively
+        function traverseCoords(coords, callback) {
+            if (Array.isArray(coords[0])) {
+                for (const c of coords) {
+                    traverseCoords(c, callback);
+                }
+            } else {
+                callback(coords[0], coords[1]);
+            }
+        }
+        
+        // Convert lat/lon to land canvas coordinates
+        function latLonToLandCanvas(lat, lon) {
+            const x = (lon - landBounds.minLon) / (landBounds.maxLon - landBounds.minLon) * landCanvas.width;
+            const y = (landBounds.maxLat - lat) / (landBounds.maxLat - landBounds.minLat) * landCanvas.height;
+            return { x, y };
+        }
+        
+        // Render a single land feature to the land canvas
+        function renderLandFeature(feature) {
+            const geomType = feature.type;
+            const coords = feature.coordinates;
+            
+            if (geomType === 'Polygon') {
+                renderPolygon(coords);
+            } else if (geomType === 'MultiPolygon') {
+                for (const polygon of coords) {
+                    renderPolygon(polygon);
+                }
+            }
+        }
+        
+        function renderPolygon(rings) {
+            landCtx.beginPath();
+            for (const ring of rings) {
+                let first = true;
+                for (const coord of ring) {
+                    const [lon, lat] = coord;
+                    const { x, y } = latLonToLandCanvas(lat, lon);
+                    if (first) {
+                        landCtx.moveTo(x, y);
+                        first = false;
+                    } else {
+                        landCtx.lineTo(x, y);
+                    }
+                }
+                landCtx.closePath();
+            }
+            landCtx.fill('evenodd');
+        }
+        
+        // Initialize land echoes on startup
+        loadLandEchoes();
+        // Draw land echoes on radar PPI with proper transformation
+        function drawLandEchoes(shipX, shipY) {
+            const shipLat = radarData.ship.lat;
+            const shipLon = radarData.ship.lon;
+            const rangeNm = radarData.range_nm;
+            const ppiRadius = radarData.ppi_radius;
+            const north = radarData.north_up ? 0 : radarData.fixed_heading;
+            const isRM = radarData.motion === 'RM';
+            
+            // Calculate pixels per degree at ship's latitude
+            const R_nm = 3440.065; // Earth radius in nautical miles
+            const latScale = R_nm * Math.PI / 180; // nm per degree latitude
+            const lonScale = latScale * Math.cos(shipLat * Math.PI / 180); // nm per degree longitude
+            
+            // Calculate what portion of land canvas to sample
+            // Range in degrees around ship
+            const rangeLat = rangeNm / latScale;
+            const rangeLon = rangeNm / lonScale;
+            
+            // Set up clipping to PPI circle
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(300, 300, ppiRadius, 0, Math.PI * 2);
+            ctx.clip();
+            
+            // Transform context for land rendering
+            ctx.save();
+            
+            if (isRM) {
+                // Relative Motion: ship stays at shipX, shipY
+                // Translate to ship position, then rotate for course-up
+                ctx.translate(shipX, shipY);
+                if (!radarData.north_up) {
+                    ctx.rotate(-(radarData.ship.heading * Math.PI / 180));
+                }
+            } else {
+                // True Motion: land stays fixed, ship moves
+                // Center at PPI, include manual/auto offset so land shifts with view
+                ctx.translate(300 + drawOffset.x, 300 + drawOffset.y);
+                if (!radarData.north_up) {
+                    ctx.rotate(-(radarData.ship.heading * Math.PI / 180));
+                }
+            }
+            
+            // Draw land from pre-rendered canvas
+            // Sample the portion of land canvas visible within radar range
+            const centerLandX = (shipLon - landBounds.minLon) / (landBounds.maxLon - landBounds.minLon) * landCanvas.width;
+            const centerLandY = (landBounds.maxLat - shipLat) / (landBounds.maxLat - landBounds.minLat) * landCanvas.height;
+            
+            // Calculate scale: land canvas pixels per nm
+            const landLonRange = landBounds.maxLon - landBounds.minLon;
+            const landLatRange = landBounds.maxLat - landBounds.minLat;
+            const landWidthNm = landLonRange * lonScale;
+            const landHeightNm = landLatRange * latScale;
+            const landPixelsPerNm = landCanvas.width / landWidthNm;
+            
+            // Radar pixels per nm
+            const radarPixelsPerNm = ppiRadius / rangeNm;
+            
+            // Scale factor
+            const scale = radarPixelsPerNm / landPixelsPerNm;
+            
+            // Ensure sampling covers full PPI even when offset forward
+            const nmPerPixelRadar = rangeNm / ppiRadius;
+            const offsetPix = Math.hypot((shipX - 300), (shipY - 300));
+            const extraNm = offsetPix * nmPerPixelRadar + 0.5; // safety margin
+            const sampleRadiusNm = rangeNm + extraNm;
+            const sampleSize = (sampleRadiusNm * 2) * landPixelsPerNm;
+            
+            // In RM, offset by ship's movement from center
+            let offsetX = 0;
+            let offsetY = 0;
+            if (!isRM) {
+                // TM: offset land based on ship's position relative to PPI center
+                const shipOffsetX = shipX - 300;
+                const shipOffsetY = shipY - 300;
+                offsetX = -shipOffsetX / scale;
+                offsetY = -shipOffsetY / scale;
+            }
+            
+            // Draw the sampled portion of land canvas
+            const sx = centerLandX - sampleSize / 2 + offsetX;
+            const sy = centerLandY - sampleSize / 2 + offsetY;
+            const sw = sampleSize;
+            const sh = sampleSize;
+            const dw = sampleSize * scale;
+            const dh = sampleSize * scale;
+            const dx = -dw / 2;
+            const dy = -dh / 2;
+            
+            ctx.drawImage(landCanvas, sx, sy, sw, sh, dx, dy, dw, dh);
+            
+            ctx.restore(); // Restore transform
+            ctx.restore(); // Restore clipping
+        }
+
+
+        // Radar state
+        let radarData = {
+            ship: { x: 300, y: 300, heading: 0, speed: 0 },
+            targets: [],
+            clutter: [],
+            range_nm: 12,
+            ppi_radius: 250,
+            mode: 'NORTH UP',
+            motion: 'RM',
+            north_up: true,
+            fixed_heading: 0,
+            tx_on: true,
+            range_rings: false,
+            ebl_visible: false,
+            ebl_bearing: 45,
+            vrm_visible: false,
+            vrm_radius: 2.0,
+            gain: 30,
+            sea: 0,
+            rain: 5
+        };
+
+        // Poll server for radar state updates
+        async function fetchRadarState() {
+            try {
+                const response = await fetch('/api/radar');
+                if (response.ok) {
+                    const serverState = await response.json();
+                    
+                    // Update radar state FIRST (including range_nm)
+                    radarData.range_nm = serverState.range_nm;
+                    radarData.ppi_radius = serverState.ppi_radius;
+                    radarData.mode = serverState.mode;
+                    radarData.motion = serverState.motion;
+                    radarData.north_up = serverState.north_up;
+                    radarData.fixed_heading = serverState.fixed_heading;
+                    radarData.tx_on = serverState.tx_on;
+                    radarData.timestamp = serverState.timestamp;
+                    
+                    // Update ship state (but don't override if manually centered or in RM mode)
+                    if (radarData.motion !== 'RM' && !manualOffset && !manualCenter) {
+                        radarData.ship.x = serverState.ship.x;
+                        radarData.ship.y = serverState.ship.y;
+                    }
+                    radarData.ship.heading = serverState.ship.heading;
+                    radarData.ship.speed = serverState.ship.speed;
+                    if (serverState.ship.lat !== undefined) radarData.ship.lat = serverState.ship.lat;
+                    if (serverState.ship.lon !== undefined) radarData.ship.lon = serverState.ship.lon;
+                    
+                    // Update targets - use server's x/y directly (server already recalculated them)
+                    radarData.targets = serverState.targets || [];
+                    
+                    // Update EBL/VRM from server (but not during active adjustment)
+                    if (!window.adjustingEBL) {
+                        radarData.ebl_bearing = serverState.ebl_bearing;
+                        radarData.ebl_visible = serverState.ebl_visible;
+                    }
+                    if (!window.adjustingVRM) {
+                        radarData.vrm_radius = serverState.vrm_radius;
+                        radarData.vrm_visible = serverState.vrm_visible;
+                    }
+                    
+                    // Update clutter if present
+                    if (serverState.clutter) {
+                        radarData.clutter = serverState.clutter;
+                    }
+                    
+
+                }
+            } catch (error) {
+                console.error('Failed to fetch radar state:', error);
+            }
+        }
+        
+        // Poll every 200ms (5 Hz) to match background integrator frequency
+        setInterval(fetchRadarState, 200);
+        // Initial fetch
+        fetchRadarState();
+        
+
+
+
+
+    // ARPA state
+    let acquiredTargets = [];
+    let acquireMode = false;
+    let selectedTarget = null;
+    const maxAcquired = 40;
+
+    // Presentation/tools state
+    let radarCenter = { x: canvas.width/2, y: canvas.height/2 };
+    // Translation applied to ship and targets (PPI circle stays fixed at radarCenter)
+    let drawOffset = { x: 0, y: 0 };
+    let manualOffset = false; // Track if offset was manually set via OFF CENTRE button
+    let manualCenter = false; // Track if CENTRE button was pressed to prevent server override
+    let vectorMinutes = 6; // 6/12/20 typical
+    let trailsEnabled = false;
+    let trailDurationSec = 0; // 0=off; otherwise trail time in seconds
+    const trails = new Map(); // id -> [{x,y,t}]
+
+    // Guard zone: simple ring sector
+    let guard = { enabled: false, innerNM: 0.5, outerNM: 2.0, startDeg: 0, endDeg: 360 };
+    let guardAlarm = false;
+    let guardEnterTimes = new Map();
+    let guardDelaySec = 2.0;
+    let guardAckSnoozeUntil = 0;
+
+    // Dual EBL/VRM
+    let ebl2_visible = false; let ebl2_bearing = 120;
+    let vrm2_visible = false; let vrm2_radius = 4.0;
+
+    // Auto-acquire zone
+    let autoZone = { enabled: false, innerNM: 1.0, outerNM: 3.0, startDeg: 320, endDeg: 40, delaySec: 1.0 };
+    let aaEnterTimes = new Map();
+
+    // Motion/Vector state
+    let lastTimestamp = null; // from server
+    let vectorStabRelative = false; // false=Ground, true=Relative
+
+    // Clutter persistence - regenerate only on sweep (simulated rotation)
+    let clutterPoints = [];
+    let lastClutterGen = 0;
+    let lastWindSpeed = 0; // Track wind changes to regenerate clutter
+    let lastRadarRange = 12.0; // Track range changes to regenerate clutter
+    const clutterRefreshInterval = 2000; // milliseconds between clutter regeneration (simulates sweep)
+
+    // CPA/TCPA Alarm state
+    let cpaAlarm = false;
+    let cpaAckSnoozeUntil = 0;
+
+    const cpaThresholds = { cpaNm: 0.5, tcpaMin: 15 };
+    let prevCpaAlarm = false;
+
+    // Simple audio alarm using WebAudio API
+    let alarmAudioCtx = null;
+    let alarmGain = null;
+    let alarmOsc = null;
+    let alarmPulseTimer = null;
+    function startAlarmTone() {
+        try {
+            if (!alarmAudioCtx) alarmAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (alarmAudioCtx.state === 'suspended') alarmAudioCtx.resume();
+            stopAlarmTone();
+            alarmGain = alarmAudioCtx.createGain();
+            alarmGain.gain.value = 0.05;
+            alarmOsc = alarmAudioCtx.createOscillator();
+            alarmOsc.type = 'sine';
+            alarmOsc.frequency.setValueAtTime(880, alarmAudioCtx.currentTime);
+            alarmOsc.connect(alarmGain).connect(alarmAudioCtx.destination);
+            alarmOsc.start();
+            // Pulse the gain for a beeping effect
+            alarmPulseTimer = setInterval(() => {
+                const t = alarmAudioCtx.currentTime;
+                try {
+                    alarmGain.gain.cancelScheduledValues(t);
+                    alarmGain.gain.setValueAtTime(0.05, t);
+                    alarmGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+                } catch (e) {}
+            }, 600);
+        } catch (e) { console.warn('Alarm tone error', e); }
+    }
+    function stopAlarmTone() {
+        try {
+            if (alarmPulseTimer) { clearInterval(alarmPulseTimer); alarmPulseTimer = null; }
+            if (alarmOsc) { alarmOsc.stop(); alarmOsc.disconnect(); alarmOsc = null; }
+            if (alarmGain) { alarmGain.disconnect(); alarmGain = null; }
+        } catch (e) {}
+    }
+
+        // WebSocket handlers
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            Object.assign(radarData, data);
+            
+            // Force SEA to 0 on first message if not explicitly set
+            if (!radarData.hasOwnProperty('sea') || radarData.sea === undefined) {
+                radarData.sea = 0;
+            }
+            
+            // Debug: log target count
+            if (radarData.targets && radarData.targets.length > 0) {
+                console.log(`Received ${radarData.targets.length} targets:`, radarData.targets);
+            }
+            // Do not overwrite lastSeen globally; update per-target in draw loop
+            const now = (radarData.timestamp || Date.now()/1000);
+            // Drop oldest if over capacity
+            if (acquiredTargets.length > maxAcquired) {
+                acquiredTargets.sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+                acquiredTargets = acquiredTargets.slice(0, maxAcquired);
+            }
+            
+            updateDisplay();
+            draw();
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        // Update display labels
+        function updateDisplay() {
+            document.getElementById('range-display').textContent = radarData.range_nm + ' NM';
+            document.getElementById('mode-display').textContent = radarData.mode;
+            document.getElementById('motion-display').textContent = radarData.motion;
+            // Position formatting (decimal degrees with N/S/E/W) shown as separate LAT/LON in status bar
+            try {
+                const lat = (radarData.ship && typeof radarData.ship.lat === 'number') ? radarData.ship.lat : null;
+                const lon = (radarData.ship && typeof radarData.ship.lon === 'number') ? radarData.ship.lon : null;
+                const fmt = (val, pos) => {
+                    if (val === null) return null;
+                    const hemi = (pos === 'lat') ? (val >= 0 ? 'N' : 'S') : (val >= 0 ? 'E' : 'W');
+                    return Math.abs(val).toFixed(4) + ' ' + hemi;
+                };
+                const latTxt = fmt(lat, 'lat');
+                const lonTxt = fmt(lon, 'lon');
+                const latEl = document.getElementById('ship-lat-display');
+                const lonEl = document.getElementById('ship-lon-display');
+                if (latEl && latTxt && (lat !== 0 || lon !== 0)) latEl.textContent = latTxt;
+                if (lonEl && lonTxt && (lat !== 0 || lon !== 0)) lonEl.textContent = lonTxt;
+            } catch (e) { /* ignore formatting errors */ }
+            document.getElementById('hdg-display').textContent = radarData.ship.heading.toFixed(0).padStart(3, '0') + '°';
+            document.getElementById('spd-display').textContent = radarData.ship.speed.toFixed(1) + ' kn';
+            document.getElementById('ebl-value').textContent = radarData.ebl_visible ? radarData.ebl_bearing.toFixed(0) + '°' : 'OFF';
+            document.getElementById('vrm-value').textContent = radarData.vrm_visible ? radarData.vrm_radius.toFixed(1) + ' NM' : 'OFF';
+            
+            // Update slider values
+            document.getElementById('gain-value').textContent = radarData.gain;
+            document.getElementById('sea-value').textContent = radarData.sea;
+            document.getElementById('rain-value').textContent = radarData.rain;
+            
+            // Update button states
+            document.getElementById('rings-btn').classList.toggle('active', radarData.range_rings);
+            document.getElementById('tx-btn').classList.toggle('active', radarData.tx_on);
+            document.getElementById('ebl-btn').classList.toggle('active', radarData.ebl_visible);
+            document.getElementById('vrm-btn').classList.toggle('active', radarData.vrm_visible);
+            document.getElementById('tx-btn').textContent = radarData.tx_on ? 'TX ON' : 'STBY';
+            document.getElementById('mode-btn').textContent = radarData.north_up ? 'NORTH UP' : 'COURSE UP';
+            document.getElementById('motion-btn').textContent = radarData.motion === 'RM' ? 'RELATIVE MOTION' : 'TRUE MOTION';
+            document.getElementById('vector-time-btn').textContent = `VECT ${vectorMinutes} min`;
+            document.getElementById('trails-btn').textContent = trailsEnabled ? (trailDurationSec >= 180 ? `TRAILS ${Math.round(trailDurationSec/60)} min` : `TRAILS ${trailDurationSec} s`) : 'TRAILS OFF';
+            document.getElementById('guard-toggle-btn').textContent = guard.enabled ? 'GUARD ON' : 'GUARD OFF';
+            document.getElementById('alarm-banner').classList.toggle('visible', guardAlarm);
+            const cpaBanner = document.getElementById('cpa-banner'); if (cpaBanner) cpaBanner.classList.toggle('visible', cpaAlarm);
+            const vsb = document.getElementById('vector-stab-btn'); if (vsb) vsb.textContent = vectorStabRelative ? 'VECT REL' : 'VECT GND';
+            const e2 = document.getElementById('ebl2-btn'); if (e2) e2.classList.toggle('active', ebl2_visible);
+            const v2 = document.getElementById('vrm2-btn'); if (v2) v2.classList.toggle('active', vrm2_visible);
+            const e2v = document.getElementById('ebl2-value'); if (e2v) e2v.textContent = ebl2_visible ? ebl2_bearing.toFixed(0) + '°' : 'OFF';
+            const v2v = document.getElementById('vrm2-value'); if (v2v) v2v.textContent = vrm2_visible ? vrm2_radius.toFixed(1) + ' NM' : 'OFF';
+            const aat = document.getElementById('aa-toggle-btn'); if (aat) aat.textContent = autoZone.enabled ? 'AUTO ACQ ON' : 'AUTO ACQ OFF';
+            const thrNm = document.getElementById('cpa-thr-nm'); if (thrNm) thrNm.value = cpaThresholds.cpaNm.toFixed(1);
+            const thrTcpa = document.getElementById('cpa-thr-tcpa'); if (thrTcpa) thrTcpa.value = cpaThresholds.tcpaMin.toFixed(0);
+        }
+
+        // Draw radar display
+        function draw() {
+            const centerX = radarCenter.x;
+            const centerY = radarCenter.y;
+            const radius = radarData.ppi_radius;
+
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // True Motion: simulator sends absolute positions; auto-offset when ship nears edge (>80% radius)
+            try {
+                const ts = radarData.timestamp || Date.now()/1000;
+                if (lastTimestamp == null) lastTimestamp = ts;
+                const dt = Math.max(0, ts - lastTimestamp);
+                lastTimestamp = ts;
+                if (radarData.motion === 'TM') {
+                    // Only auto-offset if not manually set
+                    if (!manualOffset) {
+                        const dShip = Math.hypot(radarData.ship.x - 300, radarData.ship.y - 300);
+                        if (dShip > radius * 0.8) {
+                            // Place ship ~1/3 radius from center along heading direction
+                            const north = radarData.north_up ? 0 : radarData.fixed_heading;
+                            const ang = (radarData.ship.heading - north) * Math.PI / 180;
+                            const desired = radius * 0.33;
+                            const desiredX = 300 + desired * Math.sin(ang);
+                            const desiredY = 300 - desired * Math.cos(ang);
+                            // Shift drawing (not PPI) so ship appears at desiredX/Y
+                            const prevX = drawOffset.x, prevY = drawOffset.y;
+                            const newX = desiredX - radarData.ship.x;
+                            const newY = desiredY - radarData.ship.y;
+                            const deltaX = newX - prevX;
+                            const deltaY = newY - prevY;
+                            if (deltaX !== 0 || deltaY !== 0) {
+                                // Pan existing trails and track histories so they remain visually continuous
+                                try {
+                                    trails.forEach(arr => { for (let i=0;i<arr.length;i++){ arr[i].x += deltaX; arr[i].y += deltaY; } });
+                                    acquiredTargets.forEach(tr => {
+                                        if (tr.history) { tr.history.forEach(p => { p.x += deltaX; p.y += deltaY; }); }
+                                        if (tr.lastPos) { tr.lastPos.x += deltaX; tr.lastPos.y += deltaY; }
+                                    });
+                                } catch(e) {}
+                                drawOffset.x = newX; drawOffset.y = newY;
+                            }
+                        }
+                    }
+                } else {
+                    // Relative Motion: reset offset unless manually set
+                    if (!manualOffset) {
+                        drawOffset.x = 0; drawOffset.y = 0;
+                    }
+                }
+            } catch (e) {}
+
+            // Draw PPI circle
+            ctx.strokeStyle = '#0a0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw compass ticks and labels
+            const north = radarData.north_up ? 0 : radarData.fixed_heading;
+            ctx.strokeStyle = '#0a0';
+            ctx.fillStyle = '#0a0';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'center';
+            for (let ang = 0; ang < 360; ang++) {
+                const angleRad = (ang - north) * Math.PI / 180;
+                let tickLen = 2;
+                if (ang % 10 === 0) tickLen = 10;
+                else if (ang % 5 === 0) tickLen = 5;
+
+                const x1 = centerX + (radius - 1) * Math.sin(angleRad);
+                const y1 = centerY - (radius - 1) * Math.cos(angleRad);
+                const x2 = centerX + (radius - 1 - tickLen) * Math.sin(angleRad);
+                const y2 = centerY - (radius - 1 - tickLen) * Math.cos(angleRad);
+
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+
+                if (ang % 30 === 0) {
+                    const tx = centerX + (radius + 15) * Math.sin(angleRad);
+                    const ty = centerY - (radius + 15) * Math.cos(angleRad);
+                    ctx.fillText(ang.toString().padStart(3, '0'), tx, ty + 4);
+                }
+            }
+
+            // (Sea clutter will be drawn after ship position is known so we can center suppression on ship)
+
+            // Always draw targets with echoes - BRIGHT AND VISIBLE (independent of TX)
+            let cpaRiskDetected = false;
+            radarData.targets.forEach((target, idx) => {
+                const isAcquired = acquiredTargets.some(t => t.id === idx);
+                const isSelected = selectedTarget && selectedTarget.id === idx;
+                // Apply draw translation so PPI stays fixed and targets/ship move
+                const tx = target.x + drawOffset.x;
+                const ty = target.y + drawOffset.y;
+                
+                // Skip targets outside PPI circle
+                const distFromCenter = Math.hypot(tx - 300, ty - 300);
+                if (distFromCenter > radarData.ppi_radius) return;
+                
+                // All targets are yellow like clutter
+                ctx.fillStyle = '#ffff00';
+                ctx.strokeStyle = '#ffff00';
+                ctx.globalAlpha = 1.0;
+                ctx.lineWidth = 1.5;
+                
+                // Draw solid filled circle (no stroke to avoid black outline)
+                ctx.beginPath();
+                ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw acquisition ring for acquired targets (only if within PPI)
+                if (isAcquired) {
+                    // Check if acquisition ring fits within PPI
+                    const ringRadius = 10;
+                    const distFromCenter = Math.hypot(tx - 300, ty - 300);
+                    if (distFromCenter + ringRadius <= radarData.ppi_radius) {
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([]);
+                        ctx.beginPath();
+                        ctx.arc(tx, ty, ringRadius, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw course/speed vector ONLY for ACQUIRED targets
+                if (isAcquired && target.course !== undefined && target.speed !== undefined && target.speed > 0) {
+                    // Vector length corresponds to distance covered in vectorMinutes
+                    let targSpd = target.speed; let targCrs = target.course;
+                    if (typeof vectorStabRelative !== 'undefined' && vectorStabRelative && radarData.ship) {
+                        const svx = radarData.ship.speed * Math.sin(radarData.ship.heading * Math.PI/180);
+                        const svy = -radarData.ship.speed * Math.cos(radarData.ship.heading * Math.PI/180);
+                        const tvx = target.speed * Math.sin(target.course * Math.PI/180);
+                        const tvy = -target.speed * Math.cos(target.course * Math.PI/180);
+                        const rvx = tvx - svx; const rvy = tvy - svy;
+                        targSpd = Math.hypot(rvx, rvy);
+                        targCrs = (Math.atan2(rvx, -rvy) * 180/Math.PI + 360) % 360;
+                    }
+                    const vectorNm = (targSpd * vectorMinutes) / 60.0;
+                    const vectorLen = (vectorNm / radarData.range_nm) * radarData.ppi_radius;
+                    const vecAngle = (targCrs - north) * Math.PI / 180;
+                    let ex = tx + vectorLen * Math.sin(vecAngle);
+                    let ey = ty - vectorLen * Math.cos(vecAngle);
+                    
+                    // Clip vector end point to PPI boundary
+                    const endDist = Math.hypot(ex - 300, ey - 300);
+                    if (endDist > radarData.ppi_radius) {
+                        // Calculate intersection with PPI circle
+                        const dx = ex - tx;
+                        const dy = ey - ty;
+                        const angle = Math.atan2(dy, dx);
+                        const vectorLength = Math.hypot(dx, dy);
+                        
+                        // Find intersection using parametric line equation
+                        const cx = 300, cy = 300; // PPI center
+                        const r = radarData.ppi_radius;
+                        const a = dx * dx + dy * dy;
+                        const b = 2 * (dx * (tx - cx) + dy * (ty - cy));
+                        const c = (tx - cx) * (tx - cx) + (ty - cy) * (ty - cy) - r * r;
+                        const discriminant = b * b - 4 * a * c;
+                        
+                        if (discriminant >= 0) {
+                            const t = (-b + Math.sqrt(discriminant)) / (2 * a);
+                            if (t >= 0 && t <= 1) {
+                                ex = tx + t * dx;
+                                ey = ty + t * dy;
+                            }
+                        }
+                    }
+                    
+                    // Draw white vector line clipped to PPI
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.moveTo(tx, ty);
+                    ctx.lineTo(ex, ey);
+                    ctx.stroke();
+                }
+
+                // Trails rendering
+                if (trailsEnabled) {
+                    const now = Date.now() / 1000;
+                    const key = idx;
+                    if (!trails.has(key)) trails.set(key, []);
+                    const arr = trails.get(key);
+                    arr.push({ x: tx, y: ty, t: now });
+                    // purge old
+                    while (arr.length && now - arr[0].t > trailDurationSec) arr.shift();
+                    // draw fading
+                    for (let j = 0; j < arr.length; j++) {
+                        const age = now - arr[j].t;
+                        const ln2 = 0.69314718056;
+                        const halfLife = trailDurationSec || 1;
+                        const alpha = Math.exp(-ln2 * (age / halfLife));
+                        // Blue trails for all targets (fading by age)
+                        ctx.fillStyle = `rgba(0, 170, 255, ${alpha})`;
+                        ctx.fillRect(arr[j].x, arr[j].y, 2, 2);
+                    }
+                }
+
+                // Draw target ID label for acquired targets
+                if (isAcquired) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`T${idx + 1}`, tx + 18, ty - 18);
+                }
+
+                // Update track last seen/history if acquired
+                if (isAcquired) {
+                    const tr = acquiredTargets.find(t=>t.id===idx);
+                    const now = (radarData.timestamp || Date.now()/1000);
+                    if (tr) {
+                        tr.lastSeen = now;
+                        tr.lastPos = {x: tx, y: ty};
+                        tr.course = target.course || tr.course || 0;
+                        tr.speed = target.speed || tr.speed || 0;
+                        if (!tr.history) tr.history = [];
+                        tr.history.push({x: tx, y: ty, time: Date.now()});
+                        if (tr.history.length > 120) tr.history.shift();
+                    }
+                }
+
+                // Guard zone entry check (angles relative to ship's heading)
+                if (guard.enabled) {
+                    const dx = tx - centerX;
+                    const dy = centerY - ty; // invert y for bearing math
+                    const rngPx = Math.hypot(dx, dy);
+                    const rngNm = (rngPx / radarData.ppi_radius) * radarData.range_nm;
+                    // Absolute bearing (0 = up/North on screen)
+                    const absBrg = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+                    // Convert to bearing relative to ship's head
+                    const relBrg = (absBrg - radarData.ship.heading + 360) % 360;
+                    const inRange = rngNm >= guard.innerNM && rngNm <= guard.outerNM;
+                    const inBearing = guard.startDeg <= guard.endDeg
+                        ? (relBrg >= guard.startDeg && relBrg <= guard.endDeg)
+                        : (relBrg >= guard.startDeg || relBrg <= guard.endDeg);
+                    const now = Date.now()/1000;
+                    const key = idx;
+                    if (inRange && inBearing) {
+                        if (!guardEnterTimes) guardEnterTimes = new Map();
+                        if (!guardEnterTimes.has(key)) guardEnterTimes.set(key, now);
+                        if (!guardAckSnoozeUntil) guardAckSnoozeUntil = 0;
+                        if (now >= guardAckSnoozeUntil && now - guardEnterTimes.get(key) >= (guardDelaySec||2)) {
+                            guardAlarm = true;
+                        }
+                    } else if (guardEnterTimes) {
+                        guardEnterTimes.delete(key);
+                    }
+                }
+
+                // Auto-acquire zone logic
+                if (autoZone && autoZone.enabled && !isAcquired) {
+                    const dx2 = tx - centerX;
+                    const dy2 = centerY - ty;
+                    const rngPx2 = Math.hypot(dx2, dy2);
+                    const rngNm2 = (rngPx2 / radarData.ppi_radius) * radarData.range_nm;
+                    let brg2 = (Math.atan2(dx2, dy2) * 180 / Math.PI + 360) % 360;
+                    const inRange2 = rngNm2 >= autoZone.innerNM && rngNm2 <= autoZone.outerNM;
+                    const inBearing2 = autoZone.startDeg <= autoZone.endDeg
+                        ? (brg2 >= autoZone.startDeg && brg2 <= autoZone.endDeg)
+                        : (brg2 >= autoZone.startDeg || brg2 <= autoZone.endDeg);
+                    const now2 = (radarData.timestamp || Date.now()/1000);
+                    const key2 = idx;
+                    if (inRange2 && inBearing2) {
+                        if (!aaEnterTimes.has(key2)) aaEnterTimes.set(key2, now2);
+                        if ((now2 - aaEnterTimes.get(key2)) >= (autoZone.delaySec||1)) {
+                            if (!acquiredTargets.some(t=>t.id===idx) && acquiredTargets.length < (maxAcquired||40)) {
+                                acquiredTargets.push({
+                                    id: idx,
+                                    bearing: brg2,
+                                    range: rngNm2,
+                                    course: target.course || 0,
+                                    speed: target.speed || 0,
+                                    history: [{x: tx, y: ty, time: Date.now()}],
+                                    createdAt: now2,
+                                    lastSeen: now2,
+                                    lastPos: {x: tx, y: ty},
+                                    auto: true
+                                });
+                                // Enforce auto track capacity (20)
+                                const autoCap = 20;
+                                const autos = acquiredTargets.filter(t=>t.auto);
+                                if (autos.length > autoCap) {
+                                    // remove oldest auto track(s)
+                                    const toDrop = autos.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).slice(0, autos.length - autoCap).map(t=>t.id);
+                                    acquiredTargets = acquiredTargets.filter(t => !(t.auto && toDrop.includes(t.id)));
+                                }
+                            }
+                        }
+                    } else {
+                        aaEnterTimes.delete(key2);
+                    }
+                }
+
+                // CPA/TCPA risk detection for acquired targets
+                if (isAcquired && target.course !== undefined && target.speed !== undefined) {
+                    const c = calculateCPA(
+                        radarData.ship.x + drawOffset.x, radarData.ship.y + drawOffset.y, radarData.ship.heading, radarData.ship.speed,
+                        tx, ty, target.course, target.speed,
+                        radarData.ppi_radius, radarData.range_nm
+                    );
+                    const nowS = (radarData.timestamp || Date.now()/1000);
+                    if (nowS >= cpaAckSnoozeUntil && c.tcpa > 0 && c.cpa <= cpaThresholds.cpaNm && c.tcpa <= cpaThresholds.tcpaMin) {
+                        cpaRiskDetected = true;
+                    }
+                }
+            });
+
+            // Auto-acquire zone logic and extrapolated lost tracks handled outside per-target loop
+            // Render extrapolated lost tracks (no longer present in targets)
+            const lostTimeout = 40; // seconds until drop
+            const extrapLimit = 30; // seconds of extrapolation
+            const nowTs = (radarData.timestamp || Date.now()/1000);
+            acquiredTargets = acquiredTargets.filter(tr => {
+                const exists = tr.id < radarData.targets.length;
+                if (exists) return true;
+                const age = nowTs - (tr.lastSeen||nowTs);
+                if (age > lostTimeout) return false;
+                // Draw extrapolated echo
+                if (tr.lastPos && tr.speed>=0) {
+                    const dt = Math.min(age, extrapLimit);
+                    const nm = tr.speed * dt / 60;
+                    const pix_per_nm = radarData.ppi_radius / radarData.range_nm;
+                    const dpx = nm * pix_per_nm;
+                    const north = radarData.north_up ? 0 : radarData.fixed_heading;
+                    const ang = (tr.course - north) * Math.PI/180;
+                    const ex = tr.lastPos.x + dpx * Math.sin(ang);
+                    const ey = tr.lastPos.y - dpx * Math.cos(ang);
+                    ctx.fillStyle = 'rgba(255,255,0,0.5)';
+                    ctx.beginPath(); ctx.arc(ex, ey, 8, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#ff8080'; ctx.font='bold 12px Arial'; ctx.fillText('EXTRAP', ex+12, ey-12);
+                }
+                return true;
+            });
+
+            // Draw ship (translated)
+            const shipX = radarData.ship.x + drawOffset.x;
+            const shipY = radarData.ship.y + drawOffset.y;
+            ctx.fillStyle = '#ff0'; // Yellow
+            ctx.strokeStyle = '#ff0'; // Yellow
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(shipX, shipY, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+                        // Draw land echoes
+                        if (landCanvas && radarData.tx_on && radarData.ship.lat && radarData.ship.lon) {
+                            drawLandEchoes(shipX, shipY);
+                        }
+
+
+            // Draw sea / rain clutter (after ship so we can anchor effects to ship position)
+            if (radarData.tx_on) {
+                // Regenerate clutter only every 2 seconds (simulates radar sweep)
+                const now = Date.now();
+                const windSpeed = radarData.wind_speed || 0;
+                const radarRange = radarData.range_nm;
+                const windChanged = windSpeed !== lastWindSpeed;
+                const rangeChanged = radarRange !== lastRadarRange;
+                
+                // Regenerate if: time expired, no points, wind changed, or range changed
+                if (now - lastClutterGen > clutterRefreshInterval || clutterPoints.length === 0 || windChanged || rangeChanged) {
+                    clutterPoints = [];
+                    // Wind increases clutter density: 400 base + 100 per knot
+                    const numPoints = 400 + Math.floor(windSpeed * 100);
+                    
+                    // Clutter range increases with wind: 3 nm base + 0.2 nm per knot
+                    const clutterRangeNM = 3.0 + (windSpeed * 0.2);
+                    
+                    for(let i=0; i<numPoints; i++) {
+                        const ang = Math.random() * 360;
+                        // Higher power factor makes clutter concentrate near ship (closer to 0)
+                        // Using power of 2.5 instead of 0.6 to heavily favor inner range
+                        // Store relative radius (0 to 1) within clutter range
+                        const radiusFrac = Math.pow(Math.random(), 2.5);
+                        // Store with random size (1-3 pixels) and brightness variation
+                        const size = 1 + Math.floor(Math.random() * 2.5); // 1, 2, or 3 pixels
+                        const brightVar = 0.4 + Math.random() * 0.6; // 40-100% brightness
+                        clutterPoints.push({angle: ang, radiusFrac, size, brightVar});
+                    }
+                    lastClutterGen = now;
+                    lastWindSpeed = windSpeed;
+                    lastRadarRange = radarRange;
+                    console.log(`[CLUTTER] Generated ${numPoints} points for wind ${windSpeed.toFixed(1)} kn, range ${clutterRangeNM.toFixed(1)} nm`);
+                }
+                
+                // Draw persisted clutter with SEA, GAIN, RAIN controls
+                const clutterRangeNM = 3.0 + (windSpeed * 0.2);
+                const clutterRadiusPixels = (clutterRangeNM / radarData.range_nm) * radarData.ppi_radius;
+                const ppiRadius = radarData.ppi_radius;
+                const north = radarData.north_up ? 0 : radarData.fixed_heading;
+                let drawn = 0;
+                clutterPoints.forEach((pt, i) => {
+                    // Calculate pixel position from stored relative coordinates, centered on ship
+                    // Adjust angle for Course Up mode
+                    const displayAngle = (pt.angle - north + 360) % 360;
+                    const rr = clutterRadiusPixels * pt.radiusFrac;
+                    const x = shipX + rr * Math.sin(displayAngle * Math.PI/180);
+                    const y = shipY - rr * Math.cos(displayAngle * Math.PI/180);
+                    
+                    // Skip points outside PPI circle
+                    const distFromCenter = Math.hypot(x - 300, y - 300);
+                    if (distFromCenter > ppiRadius) return;
+                    
+                    // Distance from ship for anti-sea control
+                    const dx = x - shipX;
+                    const dy = shipY - y;
+                    const dist = Math.hypot(dx, dy);
+                    const rangeFrac = dist / clutterRadiusPixels; // Use clutter radius, not full PPI
+                    
+                    // Base alpha - use stored brightness variation
+                    let alpha = 0.7 * pt.brightVar;
+                    
+                    // SEA slider: suppress inner 50% of clutter range (more effective)
+                    const seaThreshold = 0.5; // Suppress inner 50% instead of 25%
+                    if (rangeFrac < seaThreshold) {
+                        // Gradual suppression: 0 at center, full at threshold
+                        const innerFactor = rangeFrac / seaThreshold;
+                        const suppressAmount = radarData.sea / 100;
+                        // Stronger suppression with squared factor
+                        alpha *= (1.0 - suppressAmount * (1.0 - innerFactor * innerFactor));
+                    }
+                    
+                    // GAIN: affects overall brightness
+                    alpha *= (0.6 + radarData.gain / 120);
+                    
+                    // RAIN: thin out clutter
+                    const skipEvery = Math.max(1, Math.floor(10 - radarData.rain / 12));
+                    if (i % skipEvery !== 0) return;
+                    
+                    if (alpha < 0.05) return;
+                    
+                    ctx.fillStyle = `rgba(255,255,0,${Math.min(0.85, alpha).toFixed(2)})`; // Yellow clutter
+                    // Use stored random size
+                    ctx.fillRect(x, y, pt.size, pt.size);
+                    drawn++;
+                });
+            }
+
+            // DEBUG: Draw test targets at known positions to verify rendering
+            // (Removed debug magenta test targets to rely solely on simulator-fed targets)
+
+            // Draw heading line
+            if (radarData.tx_on) {
+                const hdgAngle = (radarData.ship.heading - north) * Math.PI / 180;
+                
+                // Calculate heading line to exactly touch PPI circle
+                // Find intersection of heading line with PPI boundary
+                const cx = 300, cy = 300; // PPI center
+                const ppiRadius = radarData.ppi_radius;
+                
+                // Parametric line from ship: (shipX + t*sin(hdgAngle), shipY - t*cos(hdgAngle))
+                // Circle: (x-cx)^2 + (y-cy)^2 = r^2
+                const dx = Math.sin(hdgAngle);
+                const dy = -Math.cos(hdgAngle);
+                
+                // Solve for t where line intersects circle
+                const a = dx * dx + dy * dy;
+                const b = 2 * (dx * (shipX - cx) + dy * (shipY - cy));
+                const c = (shipX - cx) * (shipX - cx) + (shipY - cy) * (shipY - cy) - ppiRadius * ppiRadius;
+                const discriminant = b * b - 4 * a * c;
+                
+                let ex = shipX + ppiRadius * dx;
+                let ey = shipY + ppiRadius * dy;
+                
+                if (discriminant >= 0) {
+                    const t = (-b + Math.sqrt(discriminant)) / (2 * a);
+                    if (t > 0) {
+                        ex = shipX + t * dx;
+                        ey = shipY + t * dy;
+                    }
+                }
+                
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(shipX, shipY);
+                ctx.lineTo(ex, ey);
+                ctx.stroke();
+
+                // Ship crosshair
+                ctx.beginPath();
+                ctx.moveTo(shipX - 15, shipY);
+                ctx.lineTo(shipX + 15, shipY);
+                ctx.moveTo(shipX, shipY - 15);
+                ctx.lineTo(shipX, shipY + 15);
+                ctx.stroke();
+            }
+
+            // Draw range rings - centered on ship, clipped to PPI
+            if (radarData.range_rings) {
+                ctx.strokeStyle = '#555';
+                ctx.lineWidth = 1;
+                const ppiRadius = radarData.ppi_radius;
+                
+                for (let i = 1; i <= 6; i++) {
+                    const ringRadiusNM = (radarData.range_nm / 6) * i;
+                    const ringRadiusPixels = (ppiRadius / 6) * i;
+                    
+                    // Draw ring centered on ship
+                    ctx.beginPath();
+                    ctx.arc(shipX, shipY, ringRadiusPixels, 0, Math.PI * 2);
+                    
+                    // Clip to PPI circle using clipping path
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, ppiRadius, 0, Math.PI * 2);
+                    ctx.clip();
+                    ctx.strokeStyle = '#555';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(shipX, shipY, ringRadiusPixels, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                    
+                    // Label (only if ring is visible in PPI)
+                    const labelX = shipX + ringRadiusPixels;
+                    const labelY = shipY;
+                    const labelDist = Math.hypot(labelX - centerX, labelY - centerY);
+                    if (labelDist <= ppiRadius) {
+                        ctx.fillStyle = '#666';
+                        ctx.font = '10px Arial';
+                        ctx.fillText(`${ringRadiusNM.toFixed(ringRadiusNM<1?2:0)} NM`, labelX + 5, labelY + 4);
+                    }
+                }
+            }
+
+            // Draw EBL
+            if (radarData.ebl_visible) {
+                const eblAngle = (radarData.ebl_bearing - north) * Math.PI / 180;
+                // Draw from ship to the edge of PPI circle in the bearing direction
+                const dx = Math.sin(eblAngle);
+                const dy = -Math.cos(eblAngle);
+                // Extend far enough to reach PPI edge from any ship position
+                const maxDist = radius * 2; // More than enough to reach edge
+                const ex = shipX + maxDist * dx;
+                const ey = shipY + maxDist * dy;
+                
+                // Clip to PPI boundary
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.clip();
+                
+                ctx.strokeStyle = '#0ff';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6,4]);
+                ctx.beginPath(); ctx.moveTo(shipX, shipY); ctx.lineTo(ex, ey); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+            // Draw VRM
+            if (radarData.vrm_visible) {
+                const vrmRadius = (radarData.vrm_radius / radarData.range_nm) * radius;
+                
+                // Clip to PPI boundary
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.clip();
+                
+                ctx.strokeStyle = '#0a0';
+                ctx.setLineDash([5,5]);
+                ctx.beginPath(); ctx.arc(shipX, shipY, vrmRadius, 0, Math.PI*2); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+            // Draw EBL2
+            if (ebl2_visible) {
+                const ebl2Angle = (ebl2_bearing - north) * Math.PI/180;
+                // Draw from ship to the edge of PPI circle in the bearing direction
+                const dx = Math.sin(ebl2Angle);
+                const dy = -Math.cos(ebl2Angle);
+                // Extend far enough to reach PPI edge from any ship position
+                const maxDist = radius * 2; // More than enough to reach edge
+                const ex2 = shipX + maxDist * dx;
+                const ey2 = shipY + maxDist * dy;
+                
+                // Clip to PPI boundary
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.clip();
+                
+                ctx.strokeStyle = '#0ff';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([6,4]);
+                ctx.beginPath(); ctx.moveTo(shipX, shipY); ctx.lineTo(ex2, ey2); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+            // Draw VRM2
+            if (vrm2_visible) {
+                const vrm2RadiusPx = (vrm2_radius / radarData.range_nm) * radius;
+                
+                // Clip to PPI boundary
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.clip();
+                
+                ctx.strokeStyle = '#0ff';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6,4]);
+                ctx.beginPath(); ctx.arc(shipX, shipY, vrm2RadiusPx, 0, Math.PI*2); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+
+            // Guard zone drawing (sector relative to ship's current heading)
+            if (guard.enabled) {
+                const inner = (guard.innerNM / radarData.range_nm) * radius;
+                const outer = (guard.outerNM / radarData.range_nm) * radius;
+                // Adjust start/end by ship heading so sector tracks bow irrespective of display mode
+                const start = (guard.startDeg + radarData.ship.heading - north) * Math.PI / 180;
+                const end = (guard.endDeg + radarData.ship.heading - north) * Math.PI / 180;
+                ctx.strokeStyle = 'rgba(255,120,0,0.7)';
+                ctx.lineWidth = 2;
+                // arcs centered on ship
+                ctx.beginPath(); ctx.arc(shipX, shipY, outer, start, end); ctx.stroke();
+                ctx.beginPath(); ctx.arc(shipX, shipY, inner, start, end); ctx.stroke();
+                // radial lines from ship
+                const sx1 = shipX + inner * Math.sin(start);
+                const sy1 = shipY - inner * Math.cos(start);
+                const sx2 = shipX + outer * Math.sin(start);
+                const sy2 = shipY - outer * Math.cos(start);
+                const ex1 = shipX + inner * Math.sin(end);
+                const ey1 = shipY - inner * Math.cos(end);
+                const ex2 = shipX + outer * Math.sin(end);
+                const ey2 = shipY - outer * Math.cos(end);
+                ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(ex1, ey1); ctx.lineTo(ex2, ey2); ctx.stroke();
+            }
+
+            // Auto-acquire zone drawing
+            if (autoZone && autoZone.enabled) {
+                const inner = (autoZone.innerNM / radarData.range_nm) * radius;
+                const outer = (autoZone.outerNM / radarData.range_nm) * radius;
+                const start = (autoZone.startDeg - north) * Math.PI / 180;
+                const end = (autoZone.endDeg - north) * Math.PI / 180;
+                ctx.strokeStyle = 'rgba(0,200,255,0.7)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(centerX, centerY, outer, start, end); ctx.stroke();
+                ctx.beginPath(); ctx.arc(centerX, centerY, inner, start, end); ctx.stroke();
+                const sx1 = centerX + inner * Math.sin(start);
+                const sy1 = centerY - inner * Math.cos(start);
+                const sx2 = centerX + outer * Math.sin(start);
+                const sy2 = centerY - outer * Math.cos(start);
+                const ex1 = centerX + inner * Math.sin(end);
+                const ey1 = centerY - inner * Math.cos(end);
+                const ex2 = centerX + outer * Math.sin(end);
+                const ey2 = centerY - outer * Math.cos(end);
+                ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(ex1, ey1); ctx.lineTo(ex2, ey2); ctx.stroke();
+            }
+
+            // Update CPA/TCPA alarm state and audio
+            prevCpaAlarm = cpaAlarm;
+            cpaAlarm = cpaRiskDetected;
+            const cpaBanner = document.getElementById('cpa-banner');
+            if (cpaBanner) cpaBanner.classList.toggle('visible', cpaAlarm);
+            if (cpaAlarm && !prevCpaAlarm) startAlarmTone();
+            if (!cpaAlarm && prevCpaAlarm) stopAlarmTone();
+        }
+
+        // Control handlers
+        function sendCommand(cmd, value) {
+            console.log(`[SEND CMD] ${cmd}${value !== undefined ? ' = ' + value : ''}, WebSocket state: ${ws.readyState}`);
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ command: cmd, value: value }));
+                console.log(`[SENT] ${cmd}`);
+            } else {
+                console.error(`[FAILED] Cannot send ${cmd}, WebSocket not open (state: ${ws.readyState})`);
+            }
+        }
+
+        document.getElementById('range-inc').onclick = async () => {
+            sendCommand('range_inc');
+            // Also trigger immediate fetch to get updated range
+            await fetchRadarState();
+            updateDisplay();
+            draw();
+        };
+        document.getElementById('range-dec').onclick = async () => {
+            sendCommand('range_dec');
+            // Also trigger immediate fetch to get updated range
+            await fetchRadarState();
+            updateDisplay();
+            draw();
+        };
+        document.getElementById('mode-btn').onclick = () => sendCommand('toggle_mode');
+        document.getElementById('motion-btn').onclick = () => {
+            const prevMotion = radarData.motion;
+            sendCommand('toggle_motion');
+            // Wait for server response, then reset ship position if switching to RM
+            setTimeout(() => {
+                if (prevMotion === 'TM' && radarData.motion === 'RM') {
+                    // Reset ship to center and clear offset
+                    radarData.ship.x = 300;
+                    radarData.ship.y = 300;
+                    drawOffset = { x: 0, y: 0 };
+                    manualOffset = false;
+                    manualCenter = true;
+                    console.log('[MOTION] Switched to RM - ship centered');
+                    draw();
+                } else if (prevMotion === 'RM' && radarData.motion === 'TM') {
+                    // Clear manual center flag when switching to TM
+                    manualCenter = false;
+                }
+            }, 100);
+        };
+    document.getElementById('offset-btn').onclick = () => { 
+        // OFF CENTRE: Move ship to 75% of PPI radius opposite to ship's course
+        const offsetDistance = radarData.ppi_radius * 0.75;
+        const courseRad = (radarData.ship.heading - 180) * Math.PI / 180; // Opposite direction
+        const newOffsetX = offsetDistance * Math.sin(courseRad);
+        const newOffsetY = -offsetDistance * Math.cos(courseRad);
+        drawOffset = { x: newOffsetX, y: newOffsetY };
+        manualOffset = true;
+        console.log('[OFF CENTRE] Ship offset to 75% opposite course:', drawOffset);
+        draw();
+    };
+    document.getElementById('center-btn').onclick = () => { 
+        drawOffset = { x: 0, y: 0 }; 
+        manualOffset = false;
+        manualCenter = true; // Prevent server from overriding position
+        // Always reset ship to true PPI center (300, 300)
+        radarData.ship.x = 300;
+        radarData.ship.y = 300;
+        console.log('[CENTRE] Ship reset to PPI center (300, 300)');
+        draw(); 
+    };
+        document.getElementById('rings-btn').onclick = () => sendCommand('toggle_rings');
+        document.getElementById('tx-btn').onclick = () => sendCommand('toggle_tx');
+        document.getElementById('ebl-btn').onclick = () => sendCommand('toggle_ebl');
+        document.getElementById('vrm-btn').onclick = () => sendCommand('toggle_vrm');
+        
+        // EBL/VRM adjustment buttons with continuous increment on hold
+        let eblPlusInterval = null;
+        let eblMinusInterval = null;
+        let vrmPlusInterval = null;
+        let vrmMinusInterval = null;
+        
+        window.adjustingEBL = false;
+        window.adjustingVRM = false;
+        
+        const incrementEBL = () => {
+            window.adjustingEBL = true;
+            radarData.ebl_bearing = (radarData.ebl_bearing + 0.5) % 360;
+            sendCommand('set_ebl', radarData.ebl_bearing);
+            draw();
+        };
+        const decrementEBL = () => {
+            window.adjustingEBL = true;
+            radarData.ebl_bearing = (radarData.ebl_bearing - 0.5 + 360) % 360;
+            sendCommand('set_ebl', radarData.ebl_bearing);
+            draw();
+        };
+        const incrementVRM = () => {
+            window.adjustingVRM = true;
+            radarData.vrm_radius = Math.min(radarData.range_nm, radarData.vrm_radius + 0.1);
+            sendCommand('set_vrm', radarData.vrm_radius);
+            draw();
+        };
+        const decrementVRM = () => {
+            window.adjustingVRM = true;
+            radarData.vrm_radius = Math.max(0.1, radarData.vrm_radius - 0.1);
+            sendCommand('set_vrm', radarData.vrm_radius);
+            draw();
+        };
+        
+        document.getElementById('ebl-plus').onmousedown = () => {
+            incrementEBL();
+            eblPlusInterval = setInterval(incrementEBL, 100);
+        };
+        document.getElementById('ebl-plus').onmouseup = () => {
+            clearInterval(eblPlusInterval);
+            setTimeout(() => { window.adjustingEBL = false; }, 200);
+        };
+        document.getElementById('ebl-plus').onmouseleave = () => {
+            clearInterval(eblPlusInterval);
+            setTimeout(() => { window.adjustingEBL = false; }, 200);
+        };
+        
+        document.getElementById('ebl-minus').onmousedown = () => {
+            decrementEBL();
+            eblMinusInterval = setInterval(decrementEBL, 100);
+        };
+        document.getElementById('ebl-minus').onmouseup = () => {
+            clearInterval(eblMinusInterval);
+            setTimeout(() => { window.adjustingEBL = false; }, 200);
+        };
+        document.getElementById('ebl-minus').onmouseleave = () => {
+            clearInterval(eblMinusInterval);
+            setTimeout(() => { window.adjustingEBL = false; }, 200);
+        };
+        
+        document.getElementById('vrm-plus').onmousedown = () => {
+            incrementVRM();
+            vrmPlusInterval = setInterval(incrementVRM, 100);
+        };
+        document.getElementById('vrm-plus').onmouseup = () => {
+            clearInterval(vrmPlusInterval);
+            setTimeout(() => { window.adjustingVRM = false; }, 200);
+        };
+        document.getElementById('vrm-plus').onmouseleave = () => {
+            clearInterval(vrmPlusInterval);
+            setTimeout(() => { window.adjustingVRM = false; }, 200);
+        };
+        
+        document.getElementById('vrm-minus').onmousedown = () => {
+            decrementVRM();
+            vrmMinusInterval = setInterval(decrementVRM, 100);
+        };
+        document.getElementById('vrm-minus').onmouseup = () => {
+            clearInterval(vrmMinusInterval);
+            setTimeout(() => { window.adjustingVRM = false; }, 200);
+        };
+        document.getElementById('vrm-minus').onmouseleave = () => {
+            clearInterval(vrmMinusInterval);
+            setTimeout(() => { window.adjustingVRM = false; }, 200);
+        };
+    // Local-only second EBL/VRM toggles
+    const e2btn = document.getElementById('ebl2-btn'); if (e2btn) e2btn.onclick = () => { ebl2_visible = !ebl2_visible; updateDisplay(); draw(); };
+    const v2btn = document.getElementById('vrm2-btn'); if (v2btn) v2btn.onclick = () => { vrm2_visible = !vrm2_visible; updateDisplay(); draw(); };
+
+        document.getElementById('gain-slider').oninput = (e) => {
+            radarData.gain = parseInt(e.target.value);
+            document.getElementById('gain-value').textContent = radarData.gain;
+            sendCommand('set_gain', radarData.gain);
+        };
+
+        document.getElementById('sea-slider').oninput = (e) => {
+            radarData.sea = parseInt(e.target.value);
+            document.getElementById('sea-value').textContent = radarData.sea;
+            sendCommand('set_sea', radarData.sea);
+        };
+
+        document.getElementById('rain-slider').oninput = (e) => {
+            radarData.rain = parseInt(e.target.value);
+            document.getElementById('rain-value').textContent = radarData.rain;
+            sendCommand('set_rain', radarData.rain);
+        };
+
+        // ARPA controls
+        document.getElementById('acquire-mode-btn').onclick = () => {
+            acquireMode = !acquireMode;
+            document.getElementById('acquire-mode-btn').classList.toggle('active', acquireMode);
+            canvas.style.cursor = acquireMode ? 'crosshair' : 'default';
+            if (!acquireMode) {
+                selectedTarget = null;
+                document.getElementById('target-info').classList.remove('visible');
+            }
+        };
+
+        document.getElementById('clear-tracks-btn').onclick = () => {
+            acquiredTargets = [];
+            selectedTarget = null;
+            document.getElementById('target-info').classList.remove('visible');
+            draw();
+        };
+
+        document.getElementById('cancel-acq-btn').onclick = () => {
+            if (selectedTarget) {
+                acquiredTargets = acquiredTargets.filter(t => t.id !== selectedTarget.id);
+                selectedTarget = null;
+                document.getElementById('target-info').classList.remove('visible');
+                draw();
+            }
+        };
+
+        // Vectors & Trails
+        document.getElementById('vector-time-btn').onclick = () => {
+            // Cycle 3/6/12/30 min
+            vectorMinutes = (vectorMinutes === 3) ? 6 : (vectorMinutes === 6 ? 12 : (vectorMinutes === 12 ? 30 : 3));
+            updateDisplay(); draw();
+        };
+        document.getElementById('trails-btn').onclick = () => {
+            if (!trailsEnabled) { trailsEnabled = true; trailDurationSec = 30; }
+            else if (trailDurationSec === 30) trailDurationSec = 180;
+            else if (trailDurationSec === 180) trailDurationSec = 360;
+            else { trailsEnabled = false; trailDurationSec = 0; trails.clear(); }
+            updateDisplay(); draw();
+        };
+        const vsb = document.getElementById('vector-stab-btn'); if (vsb) vsb.onclick = () => { vectorStabRelative = !vectorStabRelative; updateDisplay(); draw(); };
+
+    // Guard zone controls
+    document.getElementById('guard-toggle-btn').onclick = () => { guard.enabled = !guard.enabled; guardAlarm = false; updateDisplay(); draw(); };
+    const gack = document.getElementById('guard-ack-btn'); if (gack) gack.onclick = () => { guardAlarm = false; guardAckSnoozeUntil = Date.now()/1000 + 10; updateDisplay(); };
+        document.getElementById('guard-edit-btn').onclick = () => {
+            const v = prompt('Guard Zone: inner,outer,start,end,delaySec', `${guard.innerNM},${guard.outerNM},${guard.startDeg},${guard.endDeg},${guardDelaySec}`);
+            if (!v) return;
+            const parts = v.split(',').map(s=>s.trim());
+            if (parts.length>=5) {
+                guard.innerNM = parseFloat(parts[0]);
+                guard.outerNM = parseFloat(parts[1]);
+                guard.startDeg = parseFloat(parts[2]);
+                guard.endDeg = parseFloat(parts[3]);
+                guardDelaySec = parseFloat(parts[4]);
+                guardAlarm = false; updateDisplay(); draw();
+            }
+        };
+
+    // Auto-acquire controls
+    const aat = document.getElementById('aa-toggle-btn'); if (aat) aat.onclick = () => { autoZone.enabled = !autoZone.enabled; updateDisplay(); draw(); };
+    const aae = document.getElementById('aa-edit-btn'); if (aae) aae.onclick = () => {
+        const v = prompt('Auto Acquire: inner,outer,start,end,delaySec', `${autoZone.innerNM},${autoZone.outerNM},${autoZone.startDeg},${autoZone.endDeg},${autoZone.delaySec}`);
+        if (!v) return;
+        const parts = v.split(',').map(s=>s.trim());
+        if (parts.length>=5) {
+            autoZone.innerNM = parseFloat(parts[0]);
+            autoZone.outerNM = parseFloat(parts[1]);
+            autoZone.startDeg = parseFloat(parts[2]);
+            autoZone.endDeg = parseFloat(parts[3]);
+            autoZone.delaySec = parseFloat(parts[4]);
+            draw();
+        }
+    };
+
+    // CPA/TCPA alarm acknowledge
+    const cpaAck = document.getElementById('cpa-ack-btn'); if (cpaAck) cpaAck.onclick = () => {
+        cpaAckSnoozeUntil = Date.now()/1000 + 60; // 60s snooze
+        cpaAlarm = false;
+        stopAlarmTone();
+        updateDisplay();
+    };
+
+    // CPA/TCPA thresholds inputs
+    const thrNm = document.getElementById('cpa-thr-nm'); if (thrNm) thrNm.oninput = (e) => {
+        const v = parseFloat(e.target.value);
+        if (!isNaN(v)) cpaThresholds.cpaNm = Math.min(5, Math.max(0.1, v));
+        updateDisplay(); draw();
+    };
+    const thrTcpa = document.getElementById('cpa-thr-tcpa'); if (thrTcpa) thrTcpa.oninput = (e) => {
+        const v = parseInt(e.target.value);
+        if (!isNaN(v)) cpaThresholds.tcpaMin = Math.min(60, Math.max(1, v));
+        updateDisplay(); draw();
+    };
+
+    // Cursor readout
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const dx = x - radarCenter.x;
+            const dy = radarCenter.y - y;
+            let brg = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+            const north = radarData.north_up ? 0 : radarData.fixed_heading;
+            brg = (brg + north + 360) % 360;
+            const rngPx = Math.hypot(dx, dy);
+            const rngNm = (rngPx / radarData.ppi_radius) * radarData.range_nm;
+            document.getElementById('cursor-brg').textContent = brg.toFixed(1) + '°';
+            document.getElementById('cursor-rng').textContent = rngNm.toFixed(2) + ' NM';
+
+            // Compute cursor lat/lon using ship geodetic position as origin
+            try {
+                const ship = radarData.ship || {};
+                const shipLat = typeof ship.lat === 'number' ? ship.lat : null;
+                const shipLon = typeof ship.lon === 'number' ? ship.lon : null;
+                if (shipLat !== null && shipLon !== null && (shipLat !== 0 || shipLon !== 0)) {
+                    const brgRad = brg * Math.PI / 180;
+                    const dLatDeg = (rngNm * Math.cos(brgRad)) / 60.0;
+                    const dLonDeg = (rngNm * Math.sin(brgRad)) / (60.0 * Math.cos(shipLat * Math.PI / 180));
+                    const plat = shipLat + dLatDeg;
+                    const plon = shipLon + dLonDeg;
+                    const fmt = (val, pos) => {
+                        const hemi = (pos === 'lat') ? (val >= 0 ? 'N' : 'S') : (val >= 0 ? 'E' : 'W');
+                        return Math.abs(val).toFixed(4) + ' ' + hemi;
+                    };
+                    const latEl = document.getElementById('cursor-lat');
+                    const lonEl = document.getElementById('cursor-lon');
+                    if (latEl) latEl.textContent = fmt(plat, 'lat');
+                    if (lonEl) lonEl.textContent = fmt(plon, 'lon');
+                } else {
+                    const latEl = document.getElementById('cursor-lat');
+                    const lonEl = document.getElementById('cursor-lon');
+                    if (latEl) latEl.textContent = '--.--';
+                    if (lonEl) lonEl.textContent = '--.--';
+                }
+            } catch (err) {
+                // fail-safe: leave placeholders
+            }
+        });
+
+    // Canvas click for measurements edit or target acquisition
+        canvas.onclick = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            // Measurement edits via modifiers
+            const mdx = clickX - radarCenter.x; const mdy = radarCenter.y - clickY;
+            let mbrg = (Math.atan2(mdx, mdy) * 180 / Math.PI + 360) % 360;
+            const mnorth = radarData.north_up ? 0 : radarData.fixed_heading;
+            mbrg = (mbrg + mnorth + 360) % 360;
+            const mrngPx = Math.hypot(mdx, mdy);
+            const mrngNm = (mrngPx / radarData.ppi_radius) * radarData.range_nm;
+            if (e.ctrlKey && !e.shiftKey) {
+                if (radarData.ebl_visible) { radarData.ebl_bearing = mbrg; updateDisplay(); draw(); return; }
+                if (radarData.vrm_visible) { radarData.vrm_radius = mrngNm; updateDisplay(); draw(); return; }
+            }
+            if (e.ctrlKey && e.shiftKey) {
+                if (ebl2_visible) { ebl2_bearing = mbrg; updateDisplay(); draw(); return; }
+                if (vrm2_visible) { vrm2_radius = mrngNm; updateDisplay(); draw(); return; }
+            }
+
+            if (!acquireMode) return;
+
+            // Find nearest target (compare against translated draw positions)
+            let nearestTarget = null;
+            let minDist = 20; // Max 20px click radius
+
+            radarData.targets.forEach((target, idx) => {
+                const tx = target.x + drawOffset.x;
+                const ty = target.y + drawOffset.y;
+                const dist = Math.sqrt(
+                    Math.pow(clickX - tx, 2) + 
+                    Math.pow(clickY - ty, 2)
+                );
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestTarget = { ...target, id: idx, _tx: tx, _ty: ty };
+                }
+            });
+
+            if (nearestTarget) {
+                // Calculate bearing and range from ship
+                const shipX = radarData.ship.x + drawOffset.x;
+                const shipY = radarData.ship.y + drawOffset.y;
+                const dx = (nearestTarget._tx ?? (nearestTarget.x + drawOffset.x)) - shipX;
+                const dy = shipY - (nearestTarget._ty ?? (nearestTarget.y + drawOffset.y));
+                const range_px = Math.sqrt(dx * dx + dy * dy);
+                const range_nm = (range_px / radarData.ppi_radius) * radarData.range_nm;
+                
+                let bearing = Math.atan2(dx, dy) * 180 / Math.PI;
+                const north = radarData.north_up ? 0 : radarData.fixed_heading;
+                bearing = (bearing + north + 360) % 360;
+
+                // Add to acquired targets if not already tracked
+                const existingIdx = acquiredTargets.findIndex(t => t.id === nearestTarget.id);
+                if (existingIdx === -1) {
+                    acquiredTargets.push({
+                        id: nearestTarget.id,
+                        bearing: bearing,
+                        range: range_nm,
+                        course: nearestTarget.course || 0,
+                        speed: nearestTarget.speed || 0,
+                        history: [{x: (nearestTarget._tx ?? (nearestTarget.x + drawOffset.x)), y: (nearestTarget._ty ?? (nearestTarget.y + drawOffset.y)), time: Date.now()}],
+                        createdAt: Date.now()/1000,
+                        lastSeen: Date.now()/1000,
+                        lastPos: {x: (nearestTarget._tx ?? (nearestTarget.x + drawOffset.x)), y: (nearestTarget._ty ?? (nearestTarget.y + drawOffset.y))},
+                        auto: false
+                    });
+                    // Enforce total capacity (40)
+                    if (acquiredTargets.length > maxAcquired) {
+                        acquiredTargets.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+                        acquiredTargets = acquiredTargets.slice(0, maxAcquired);
+                    }
+                }
+
+                // Select this target and show info panel
+                selectedTarget = acquiredTargets.find(t => t.id === nearestTarget.id) || nearestTarget;
+                selectedTarget.bearing = bearing;
+                selectedTarget.range = range_nm;
+                updateTargetInfo(selectedTarget);
+                draw();
+            }
+        };
+
+        // Calculate and update target info panel
+        function updateTargetInfo(target) {
+            document.getElementById('tgt-brg').textContent = target.bearing.toFixed(1) + '°';
+            document.getElementById('tgt-rng').textContent = target.range.toFixed(2) + ' NM';
+            
+            if (target.course !== undefined) {
+                document.getElementById('tgt-crs').textContent = target.course.toFixed(0) + '°';
+                document.getElementById('tgt-spd').textContent = target.speed.toFixed(1) + ' kn';
+
+                // Calculate CPA/TCPA
+                const shipX = radarData.ship.x + drawOffset.x;
+                const shipY = radarData.ship.y + drawOffset.y;
+                const tgtX = (target.x !== undefined ? target.x + drawOffset.x : shipX);
+                const tgtY = (target.y !== undefined ? target.y + drawOffset.y : shipY);
+                const cpa = calculateCPA(
+                    shipX, shipY, radarData.ship.heading, radarData.ship.speed,
+                    tgtX, tgtY, target.course, target.speed,
+                    radarData.ppi_radius, radarData.range_nm
+                );
+                
+                const riskCpaNm = cpaThresholds.cpaNm; // threshold CPA distance
+                const riskTcpaMin = cpaThresholds.tcpaMin; // threshold TCPA minutes
+                let cpaText = cpa.cpa.toFixed(2) + ' NM';
+                let tcpaText = cpa.tcpa > 0 ? cpa.tcpa.toFixed(1) + ' min' : '---';
+                const infoPanel = document.getElementById('target-info');
+                infoPanel.querySelectorAll('.alert-line').forEach(el => el.remove());
+                if (cpa.tcpa > 0 && cpa.cpa <= riskCpaNm && cpa.tcpa <= riskTcpaMin) {
+                    cpaText = cpaText + ' (!)';
+                    tcpaText = tcpaText + ' (!)';
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'data-row alert-line';
+                    alertDiv.innerHTML = '<span class="label">ALERT:</span><span class="value alert">RISK OF COLLISION</span>';
+                    infoPanel.appendChild(alertDiv);
+                }
+                document.getElementById('tgt-cpa').textContent = cpaText;
+                document.getElementById('tgt-tcpa').textContent = tcpaText;
+            } else {
+                document.getElementById('tgt-crs').textContent = '---';
+                document.getElementById('tgt-spd').textContent = '---';
+                document.getElementById('tgt-cpa').textContent = '---';
+                document.getElementById('tgt-tcpa').textContent = '---';
+            }
+
+            document.getElementById('target-info').classList.add('visible');
+            guardAlarm = false; updateDisplay();
+        }
+
+        // CPA/TCPA calculation
+        function calculateCPA(shipX, shipY, shipHdg, shipSpd, tgtX, tgtY, tgtCrs, tgtSpd, ppiRadius, rangeNM) {
+            // Convert target & ship courses/speeds to ground-track velocities (knots -> NM/min)
+            const shipVxNmMin = shipSpd * Math.sin(shipHdg * Math.PI / 180) / 60;
+            const shipVyNmMin = -shipSpd * Math.cos(shipHdg * Math.PI / 180) / 60;
+            const tgtVxNmMin = tgtSpd * Math.sin(tgtCrs * Math.PI / 180) / 60;
+            const tgtVyNmMin = -tgtSpd * Math.cos(tgtCrs * Math.PI / 180) / 60;
+            const relVx = tgtVxNmMin - shipVxNmMin;
+            const relVy = tgtVyNmMin - shipVyNmMin;
+            const relSpeed = Math.hypot(relVx, relVy);
+            if (relSpeed < 0.01) return { cpa: 999, tcpa: -1 };
+            const dxPx = tgtX - shipX;
+            const dyPx = tgtY - shipY;
+            const rangePx = Math.hypot(dxPx, dyPx);
+            const currentRangeNm = (rangePx / ppiRadius) * rangeNM;
+            // Time to CPA (minutes)
+            const tcpa = -(dxPx * relVx + dyPx * relVy) / (relVx * relVx + relVy * relVy);
+            if (tcpa < 0) return { cpa: currentRangeNm, tcpa: -1 };
+            const cpaX = dxPx + relVx * tcpa;
+            const cpaY = dyPx + relVy * tcpa;
+            const cpaPx = Math.hypot(cpaX, cpaY);
+            const cpaNm = (cpaPx / ppiRadius) * rangeNM;
+            return { cpa: cpaNm, tcpa: tcpa };
+        }
+
+        // Initial draw
+        draw();
+    </script>
+</body>
+</html>

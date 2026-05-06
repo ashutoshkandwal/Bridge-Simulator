@@ -1,0 +1,91 @@
+# GDAL INSTALLATION ONE-PAGER
+
+## Status Check ✓
+
+Your system: **Windows 10, Python 3.10 64-bit**  
+GDAL status: **NOT INSTALLED** → Need to install
+
+## What You Need (3 files)
+
+1. **osgeo4w-setup-x86_64.exe** (to download)
+2. **GDAL_INSTALL_CHECKLIST.md** (guide to follow)  
+3. **PowerShell** (to verify)
+
+---
+
+## INSTALLATION (3 Steps, 15 minutes)
+
+### STEP 1: Download
+```
+URL: https://trac.osgeo.org/osgeo4w/
+File: osgeo4w-setup-x86_64.exe (click link)
+Save: Downloads folder
+Time: 2 minutes
+```
+
+### STEP 2: Install  
+```
+1. Double-click osgeo4w-setup-x86_64.exe
+2. Click Next > Next > ...
+3. At "Libs" tab: Click "Skip" next to:
+   - gdal           → shows version (3.7.0)
+   - python3-gdal   → shows version (3.7.0)
+4. Click Next until Finish
+5. Wait for progress bar (5-10 min)
+Time: 10 minutes
+```
+
+### STEP 3: Verify
+```powershell
+cd "e:\PYTHON\Radar simulator\bridge_sim_configurable"
+python setup_gdal.py --verbose
+```
+Expected: `✓ SUCCESS: GDAL is ready to use!`  
+Time: 1 minute
+
+---
+
+## IF SUCCESSFUL: Test ENC
+
+Download from: https://www.charts.noaa.gov/ENCs/ENCs.shtml  
+Example: US5VA18M.000 → Extract to `bridge_sim/areas/noaa_charts/`
+
+```powershell
+python tools/noaa_enc_loader.py "bridge_sim/areas/noaa_charts/US5VA18M.000"
+```
+
+Expected: Chart layers load, shows features  
+Time: 5 minutes
+
+---
+
+## THEN: Report Back
+
+Tell me:
+- ✓ setup_gdal.py shows SUCCESS
+- ✓ ENC loader test passed  
+
+**Then I'll add NOAA charts to your ECDIS!**
+
+---
+
+## QUICK TROUBLESHOOTING
+
+| Problem | Fix |
+|---------|-----|
+| Installer won't start | Right-click → Run as Administrator |
+| "GDAL not found" after install | Close PowerShell, open NEW window, retry |
+| Slow download | Use different mirror in Step 2 |
+
+---
+
+## FILES TO USE
+
+- 👉 **Start**: `GDAL_INSTALL_CHECKLIST.md` (detailed steps)
+- 📘 **Reference**: `GDAL_INSTALL_WINDOWS.md` (full guide)
+- 🔧 **Auto-verify**: `setup_gdal.py` (run after install)
+- 📊 **Load charts**: `tools/noaa_enc_loader.py` (use after GDAL works)
+
+---
+
+**Ready? Download the installer and follow the checklist!** ⬆️

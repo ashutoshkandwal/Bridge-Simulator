@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Bridge 3D Demo</title>
+  <style>
+    body,html { margin:0; padding:0; overflow:hidden; background:#000; font-family:Arial; }
+    #hud { position:fixed; top:10px; left:10px; color:#0f0; font-size:14px; background:rgba(0,0,0,0.4); padding:8px 12px; border:1px solid #0a0; border-radius:6px; z-index:100; }
+    #binocularOverlay { position:fixed; inset:0; pointer-events:none; display:none; }
+    #binocularOverlay svg { width:100%; height:100%; }
+    #controlsPanel { position:fixed; top:10px; right:10px; background:rgba(20,20,20,0.6); color:#ddd; padding:10px 14px; border:1px solid #444; border-radius:6px; width:240px; z-index:100; }
+    #controlsPanel button { width:100%; margin:4px 0; padding:6px; background:#222; color:#eee; border:1px solid #555; cursor:pointer; }
+    #controlsPanel button:hover { background:#333; }
+    #controlsPanel button.active { background:#0a5; border-color:#0f0; }
+    canvas { display:block; }
+    
+    /* Navigation ribbon (slide-in from left) */
+    .side-ribbon {
+      position: fixed;
+      top: 12px;
+      left: -36px;
+      width: 44px;
+      padding: 6px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid #0f0;
+      border-radius: 0 8px 8px 0;
+      border-left: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 3000;
+      backdrop-filter: blur(2px);
+      transition: left 0.3s ease;
+    }
+    .side-ribbon:hover { left: 0; }
+    .side-ribbon::after {
+      content: '▶';
+      position: absolute;
+      right: -16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 40px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid #0f0;
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #0f0;
+      cursor: pointer;
+    }
+    .side-ribbon:hover::after { content: '◀'; }
+    .ribbon-btn {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      margin: 0;
+      border-radius: 6px;
+      background: #222;
+      color: #0f0;
+      border: 1px solid #0a0;
+      font-size: 16px;
+      line-height: 32px;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      transition: background .2s, border-color .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ribbon-btn:hover { background:#2b2b2b; border-color:#0f0; }
+    .ribbon-btn.exit { color:#ff6666; border-color:#a00; }
+    .ribbon-btn.active { background:#0a5; border-color:#0f0; }
+  </style>
+</head>
+<body>
+  <!-- Navigation ribbon -->
+  <div class="side-ribbon" aria-label="Navigation">
+    <button class="ribbon-btn" id="nav-main" title="Go to Main Menu">🏠</button>
+    <button class="ribbon-btn" id="nav-radar" title="Go to Radar">📡</button>
+    <button class="ribbon-btn" id="nav-ecdis" title="Go to ECDIS">🗺️</button>
+    <button class="ribbon-btn" id="nav-bridge" title="Go to Bridge Controls">⚙️</button>
+    <button class="ribbon-btn active" id="nav-3d" title="3D Bridge View (Current)">🌊</button>
+    <button class="ribbon-btn exit" id="nav-exit" title="Exit Simulation">✖</button>
+  </div>
+  
+  <div id="hud">Heading: <span id="hdg">0</span>° | Speed: <span id="spd">0</span> kn | Targets: <span id="tcount">0</span></div>
+  <div id="controlsPanel">
+    <button id="toggleBinocular">BINOCULAR VIEW</button>
+    <button id="toggleDayNight">DAY / NIGHT</button>
+    <button id="toggleSway" class="active">SHIP SWAY: ON</button>
+    <button id="resetCam">RESET CAMERA</button>
+    <small style="display:block;margin-top:6px;opacity:0.7;">Demo mode: isolated from main UI.</small>
+    <div style="margin-top:8px;font-size:11px;opacity:0.6;">
+      <div>Smooth Heading: <span id="heading-smooth">5%</span></div>
+      <div>Camera Sway: <span id="sway-amount">Auto</span></div>
+    </div>
+  </div>
+  <div id="binocularOverlay">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+      <defs>
+        <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+          <stop offset="60%" stop-color="rgba(0,0,0,0)"/>
+          <stop offset="100%" stop-color="rgba(0,0,0,0.85)"/>
+        </radialGradient>
+      </defs>
+      <rect x="0" y="0" width="100" height="100" fill="url(#vignette)" />
+      <circle cx="35" cy="50" r="22" stroke="#222" stroke-width="0.5" fill="none" />
+      <circle cx="65" cy="50" r="22" stroke="#222" stroke-width="0.5" fill="none" />
+    </svg>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    
+    // Basic Three.js scene setup
+    const scene = new THREE.Scene();
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+    // Renderer ready
+
+    // Camera rig (bridge eye position + binocular zoom)
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.5, 50000);
+    const cameraBase = new THREE.Object3D();
+    cameraBase.position.set(0, 10, 0); // Bridge deck height
+    camera.position.set(0, 0, 0); // Camera at center of cameraBase
+    camera.lookAt(0, 0, -100); // Look forward at horizon
+    cameraBase.add(camera);
+    scene.add(cameraBase);
+    // Camera ready
+
+    // Manual mouse look controls (horizontal rotation only)
+    let isDragging = false;
+    let previousMouseX = 0;
+    let cameraRotationY = 0; // Manual rotation angle
+
+    renderer.domElement.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { // Left mouse button
+        isDragging = true;
+        previousMouseX = e.clientX;
+      }
+    });
+
+    renderer.domElement.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        const deltaX = e.clientX - previousMouseX;
+        cameraRotationY -= deltaX * 0.003; // Sensitivity adjustment
+        previousMouseX = e.clientX;
+      }
+    });
+
+    renderer.domElement.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    renderer.domElement.addEventListener('mouseleave', () => {
+      isDragging = false;
+    });
+
+    // --- Binocular FOV zoom logic ---
+    let isBinocular = false;
+    const defaultFov = 60;
+    const minFov = 15;
+    const maxFov = 60;
+    camera.fov = defaultFov;
+    camera.updateProjectionMatrix();
+
+    function setBinocularMode(on) {
+      isBinocular = on;
+      if (on) {
+        // Show overlay, allow FOV zoom
+        document.getElementById('binocularOverlay').style.display = 'block';
+        controls.enableZoom = false; // Still no dolly zoom, only FOV
+      } else {
+        // Hide overlay, reset FOV
+        document.getElementById('binocularOverlay').style.display = 'none';
+        camera.fov = defaultFov;
+        camera.updateProjectionMatrix();
+      }
+    }
+
+    // Toggle binocular view button
+    document.getElementById('toggleBinocular').addEventListener('click', function() {
+      setBinocularMode(!isBinocular);
+    });
+
+    // Mouse wheel for FOV zoom in binocular mode
+    window.addEventListener('wheel', function(e) {
+      if (!isBinocular) return;
+      if (e.ctrlKey || e.metaKey) return; // Don't interfere with browser zoom
+      e.preventDefault();
+      let fov = camera.fov + (e.deltaY > 0 ? 2 : -2);
+      fov = Math.max(minFov, Math.min(maxFov, fov));
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }, { passive: false });
+
+    // Optional: keyboard +/- for FOV zoom
+    window.addEventListener('keydown', function(e) {
+      if (!isBinocular) return;
+      if (e.key === '+' || e.key === '=') {
+        camera.fov = Math.max(minFov, camera.fov - 2);
+        camera.updateProjectionMatrix();
+      } else if (e.key === '-' || e.key === '_') {
+        camera.fov = Math.min(maxFov, camera.fov + 2);
+        camera.updateProjectionMatrix();
+      }
+    });
+    
+    // Controls ready
+    
+    // Debug helpers
+    const axesHelper = new THREE.AxesHelper(100);
+    scene.add(axesHelper);
+    const gridHelper = new THREE.GridHelper(1000, 20, 0x444444, 0x222222);
+    scene.add(gridHelper);
+    // Helpers ready
+
+    // Lighting (day/night toggle)
+
+    // Brighter day lighting
+    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x4a5f70, 1.5); // was 0.8
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xfffaed, 4.5); // was 2.5
+    sun.position.set(200,400,200);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+    scene.add(sun);
+    // Ambient light for general brightness
+    const ambient = new THREE.AmbientLight(0xffffff, 0.7); // was 0.2
+    scene.add(ambient);
+    // Lighting ready
+    
+    // Enable shadows on renderer
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
+    // Simple fog for atmosphere
+    scene.fog = new THREE.Fog(0x87ceeb, 5000, 30000);
+
+    // Water plane with wave animation - EXTREME contrast for visibility
+    const waterGeom = new THREE.PlaneGeometry(10000, 10000, 128, 128); // Reduced segments for larger facets
+    const waterMat = new THREE.MeshLambertMaterial({ 
+      color: 0x004466,
+      flatShading: true, // Large faceted triangles
+      wireframe: false
+    });
+    const water = new THREE.Mesh(waterGeom, waterMat);
+    water.rotation.x = -Math.PI/2;
+    water.position.y = 0;
+    water.receiveShadow = true;
+    scene.add(water);
+    
+    // Store original water vertex positions for wave animation
+    const waterPositions = water.geometry.attributes.position;
+    const waterOriginalY = new Float32Array(waterPositions.count);
+    for (let i = 0; i < waterPositions.count; i++) {
+      waterOriginalY[i] = waterPositions.getY(i);
+    }
+    // Water ready
+
+    // Ship placeholder (simple box for now)
+    const shipGroup = new THREE.Group();
+    
+    // Main hull body (rectangular center section)
+    const hullMat = new THREE.MeshPhongMaterial({ color:0x505050 }); // Dark gray for hull
+    const bridgeMat = new THREE.MeshPhongMaterial({ color:0x808080 }); // Medium gray for superstructure
+    const mastMat = new THREE.MeshPhongMaterial({ color:0x606060 }); // Gray for mast
+    const deckMat = new THREE.MeshPhongMaterial({ color:0x707070 }); // Gray for deck
+    
+    const hullGeom = new THREE.BoxGeometry(18, 6, 40);
+    const hullMesh = new THREE.Mesh(hullGeom, hullMat);
+    hullMesh.position.set(0, 3, 0);
+    shipGroup.add(hullMesh);
+    
+    // Deck on top of main hull
+    const deckGeom = new THREE.BoxGeometry(18, 0.3, 40);
+    const deckMesh = new THREE.Mesh(deckGeom, deckMat);
+    deckMesh.position.set(0, 6.15, 0);
+    shipGroup.add(deckMesh);
+    
+    // Bow section - multiple tapered boxes for smooth narrowing
+    const bow1Geom = new THREE.BoxGeometry(16, 6, 8);
+    const bow1Mesh = new THREE.Mesh(bow1Geom, hullMat);
+    bow1Mesh.position.set(0, 3, -24);
+    shipGroup.add(bow1Mesh);
+    
+    const bow1DeckGeom = new THREE.BoxGeometry(16, 0.3, 8);
+    const bow1DeckMesh = new THREE.Mesh(bow1DeckGeom, deckMat);
+    bow1DeckMesh.position.set(0, 6.15, -24);
+    shipGroup.add(bow1DeckMesh);
+    
+    const bow2Geom = new THREE.BoxGeometry(14, 6, 6);
+    const bow2Mesh = new THREE.Mesh(bow2Geom, hullMat);
+    bow2Mesh.position.set(0, 3, -31);
+    shipGroup.add(bow2Mesh);
+    
+    const bow2DeckGeom = new THREE.BoxGeometry(14, 0.3, 6);
+    const bow2DeckMesh = new THREE.Mesh(bow2DeckGeom, deckMat);
+    bow2DeckMesh.position.set(0, 6.15, -31);
+    shipGroup.add(bow2DeckMesh);
+    
+    const bow3Geom = new THREE.BoxGeometry(10, 6, 4);
+    const bow3Mesh = new THREE.Mesh(bow3Geom, hullMat);
+    bow3Mesh.position.set(0, 3, -36);
+    shipGroup.add(bow3Mesh);
+    
+    const bow3DeckGeom = new THREE.BoxGeometry(10, 0.3, 4);
+    const bow3DeckMesh = new THREE.Mesh(bow3DeckGeom, deckMat);
+    bow3DeckMesh.position.set(0, 6.15, -36);
+    shipGroup.add(bow3DeckMesh);
+    
+    const bow4Geom = new THREE.BoxGeometry(6, 6, 3);
+    const bow4Mesh = new THREE.Mesh(bow4Geom, hullMat);
+    bow4Mesh.position.set(0, 3, -40.5);
+    shipGroup.add(bow4Mesh);
+    
+    const bow4DeckGeom = new THREE.BoxGeometry(6, 0.3, 3);
+    const bow4DeckMesh = new THREE.Mesh(bow4DeckGeom, deckMat);
+    bow4DeckMesh.position.set(0, 6.15, -40.5);
+    shipGroup.add(bow4DeckMesh);
+    
+    // Stern (aft part at +Z behind bridge)
+    const sternGeom = new THREE.BoxGeometry(16, 6, 10);
+    const sternMesh = new THREE.Mesh(sternGeom, hullMat);
+    sternMesh.position.set(0, 3, 25);
+    shipGroup.add(sternMesh);
+    
+    const sternDeckGeom = new THREE.BoxGeometry(16, 0.3, 10);
+    const sternDeckMesh = new THREE.Mesh(sternDeckGeom, deckMat);
+    sternDeckMesh.position.set(0, 6.15, 25);
+    shipGroup.add(sternDeckMesh);
+    
+    // Superstructure (bridge house - where camera is)
+    const bridgeGeom = new THREE.BoxGeometry(14, 8, 12);
+    const bridgeMesh = new THREE.Mesh(bridgeGeom, bridgeMat);
+    bridgeMesh.position.set(0, 10, 5);
+    shipGroup.add(bridgeMesh);
+    
+    // Forward mast (ahead of bridge) - smaller and positioned on bow2
+    const mastGeom = new THREE.CylinderGeometry(0.2, 0.3, 8, 8);
+    const mastMesh = new THREE.Mesh(mastGeom, mastMat);
+    mastMesh.position.set(0, 10, -31); // Base touches bow2 top at y=6, mast height 8, so center at y=10
+    shipGroup.add(mastMesh);
+    
+    // Mast top platform
+    const mastTopGeom = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 8);
+    const mastTopMesh = new THREE.Mesh(mastTopGeom, mastMat);
+    mastTopMesh.position.set(0, 14.5, -31);
+    shipGroup.add(mastTopMesh);
+    
+    // Own ship navigation lights (power-driven vessel >100m)
+    const ownLightsGroup = new THREE.Group();
+    ownLightsGroup.name = 'navigationLights';
+    
+    const lightGeom = new THREE.SphereGeometry(0.4, 8, 8);
+    
+    // Port light (red, left side) - positioned OUTSIDE accommodation block
+    const ownPortLight = new THREE.Mesh(lightGeom,
+      new THREE.MeshPhongMaterial({ color:0xff0000, emissive:0xff0000, emissiveIntensity:1.0 }));
+    ownPortLight.position.set(-9, 12, 5); // Outside left side of accommodation
+    ownLightsGroup.add(ownPortLight);
+    
+    // Starboard light (green, right side) - positioned OUTSIDE accommodation block
+    const ownStarboardLight = new THREE.Mesh(lightGeom,
+      new THREE.MeshPhongMaterial({ color:0x00ff00, emissive:0x00ff00, emissiveIntensity:1.0 }));
+    ownStarboardLight.position.set(9, 12, 5); // Outside right side of accommodation
+    ownLightsGroup.add(ownStarboardLight);
+    
+    // Stern light (white)
+    const ownSternLight = new THREE.Mesh(lightGeom,
+      new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:1.0 }));
+    ownSternLight.position.set(0, 12, 28);
+    ownLightsGroup.add(ownSternLight);
+    
+    // Forward masthead light (smaller for backscatter effect when viewing from bridge)
+    const ownMasthead1Geom = new THREE.SphereGeometry(0.2, 8, 8); // Smaller sphere
+    const ownMasthead1 = new THREE.Mesh(ownMasthead1Geom,
+      new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:0.6 }));
+    ownMasthead1.position.set(0, 15, -28);
+    ownLightsGroup.add(ownMasthead1);
+    
+    // Add backscatter glow for forward masthead (visible from bridge)
+    const glowGeom = new THREE.SphereGeometry(1.5, 16, 16);
+    const glowMat = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff, 
+      transparent: true, 
+      opacity: 0.15,
+      side: THREE.BackSide // Glow visible from inside
+    });
+    const backscatterGlow = new THREE.Mesh(glowGeom, glowMat);
+    backscatterGlow.position.set(0, 15, -28);
+    backscatterGlow.name = 'backscatterGlow';
+    ownLightsGroup.add(backscatterGlow);
+    
+    // Aft masthead light (higher)
+    const ownMasthead2 = new THREE.Mesh(lightGeom,
+      new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:1.0 }));
+    ownMasthead2.position.set(0, 17, 8);
+    ownLightsGroup.add(ownMasthead2);
+    
+    ownLightsGroup.visible = false; // Hidden by default
+    shipGroup.add(ownLightsGroup);
+    
+    scene.add(shipGroup);
+    // Ship ready
+
+    // Target group
+    const targetsGroup = new THREE.Group();
+    scene.add(targetsGroup);
+
+    // Land mesh group
+    const landGroup = new THREE.Group();
+    scene.add(landGroup);
+    // Groups ready
+
+    let isNight = false;
+    function applyLightingMode() {
+      if (isNight) {
+        // Night mode - dark blue sky, low intensity
+        sun.intensity = 0.2; 
+        sun.color.setHex(0x6699cc);
+        hemi.intensity = 0.3;
+        hemi.color.setHex(0x0a1929);
+        hemi.groundColor.setHex(0x050a14);
+        ambient.intensity = 0.15;
+        renderer.setClearColor(0x000510, 1);
+        scene.fog.color.setHex(0x000510);
+        scene.fog.near = 3000;
+        scene.fog.far = 20000;
+        water.material.color.setHex(0x0a1a2e);
+        landGroup.children.forEach(mesh => {
+          mesh.material.color.setHex(0x1a2a1a);
+        });
+        
+        // Show navigation lights for own ship
+        const ownLights = shipGroup.getObjectByName('navigationLights');
+        if (ownLights) {
+          ownLights.visible = true;
+          // Initialize all lights to visible, sector logic will adjust
+          ownLights.children.forEach(light => light.visible = true);
+        }
+        
+        // Show navigation lights for all targets
+        targetsGroup.children.forEach(target => {
+          const lights = target.getObjectByName('navigationLights');
+          if (lights) {
+            lights.visible = true;
+            // Initialize all lights to visible, sector logic will adjust
+            lights.children.forEach(light => light.visible = true);
+          }
+        });
+      } else {
+        // Day mode - bright sky, strong sun
+        sun.intensity = 1.2;
+        sun.color.setHex(0xfffaed);
+        hemi.intensity = 0.8;
+        hemi.color.setHex(0x87ceeb);
+        hemi.groundColor.setHex(0x4a5f70);
+        ambient.intensity = 0.4;
+        renderer.setClearColor(0x87ceeb, 1);
+        scene.fog.color.setHex(0x87ceeb);
+        scene.fog.near = 5000;
+        scene.fog.far = 30000;
+        water.material.color.setHex(0x2a6b8f);
+        landGroup.children.forEach(mesh => {
+          mesh.material.color.setHex(0x5a8c6a);
+        });
+        
+        // Show navigation lights for own ship (TEMPORARY - testing all-round lights)
+        const ownLights = shipGroup.getObjectByName('navigationLights');
+        if (ownLights) {
+          ownLights.visible = true;
+          ownLights.children.forEach(light => light.visible = true);
+        }
+        
+        // Show navigation lights for all targets (TEMPORARY - testing all-round lights)
+        targetsGroup.children.forEach(target => {
+          const lights = target.getObjectByName('navigationLights');
+          if (lights) {
+            lights.visible = true;
+            lights.children.forEach(light => light.visible = true);
+          }
+        });
+      }
+    }
+    applyLightingMode();
+    // Initial lighting applied
+
+    function createTargetMesh(vesselType = 'power_100plus') {
+      // Create a realistic ship with black hull and white superstructure
+      // SCALED UP 10x for realistic visibility at distance
+      const targetGroup = new THREE.Group();
+      targetGroup.userData.vesselType = vesselType;
+      
+      const hullMat = new THREE.MeshPhongMaterial({ color:0x1a1a1a }); // Black/dark gray hull
+      const bridgeMat = new THREE.MeshPhongMaterial({ color:0xf0f0f0 }); // White superstructure
+      
+      // Main hull (scaled 10x larger)
+      const hullGeom = new THREE.BoxGeometry(200, 60, 400);
+      const hullMesh = new THREE.Mesh(hullGeom, hullMat);
+      hullMesh.position.set(0, 30, 0);
+      targetGroup.add(hullMesh);
+      
+      // Bow taper (2 sections)
+      const bow1Geom = new THREE.BoxGeometry(160, 60, 80);
+      const bow1Mesh = new THREE.Mesh(bow1Geom, hullMat);
+      bow1Mesh.position.set(0, 30, -240);
+      targetGroup.add(bow1Mesh);
+      
+      const bow2Geom = new THREE.BoxGeometry(100, 60, 50);
+      const bow2Mesh = new THREE.Mesh(bow2Geom, hullMat);
+      bow2Mesh.position.set(0, 30, -320);
+      targetGroup.add(bow2Mesh);
+      
+      // Stern
+      const sternGeom = new THREE.BoxGeometry(160, 60, 100);
+      const sternMesh = new THREE.Mesh(sternGeom, hullMat);
+      sternMesh.position.set(0, 30, 250);
+      targetGroup.add(sternMesh);
+      
+      // Bridge superstructure (white)
+      const bridgeGeom = new THREE.BoxGeometry(140, 80, 120);
+      const bridgeMesh = new THREE.Mesh(bridgeGeom, bridgeMat);
+      bridgeMesh.position.set(0, 100, 50);
+      targetGroup.add(bridgeMesh);
+      
+      // Mast (dark gray)
+      const mastMat = new THREE.MeshPhongMaterial({ color:0x333333 });
+      const mastGeom = new THREE.CylinderGeometry(3, 4, 80, 8);
+      const mastMesh = new THREE.Mesh(mastGeom, mastMat);
+      mastMesh.position.set(0, 140, -200);
+      targetGroup.add(mastMesh);
+      
+      // Add navigation lights based on vessel type (will be visible only at night)
+      addNavigationLights(targetGroup, vesselType);
+      
+      return targetGroup;
+    }
+    
+    function addNavigationLights(targetGroup, vesselType) {
+      console.log(`[addNavigationLights] ENTRY: vesselType parameter = "${vesselType}", type = ${typeof vesselType}`);
+      const SCALE = 10; // Scale factor for vessel size
+      const lightGeom = new THREE.SphereGeometry(20, 16, 16); // All navigation lights same size
+      const lightsGroup = new THREE.Group();
+      lightsGroup.name = 'navigationLights';
+      
+      // Helper to set scaled position
+      const setPos = (mesh, x, y, z) => mesh.position.set(x * SCALE, y * SCALE, z * SCALE);
+      
+      // Masthead lights and special lights based on vessel type
+      switch(vesselType) {
+        case 'power_100plus':
+          console.log('[SWITCH] Matched power_100plus');
+          // Standard sidelights OUTSIDE accommodation block
+          const portLight = new THREE.Mesh(lightGeom, 
+            new THREE.MeshBasicMaterial({ color:0xff0000 })); // Changed to MeshBasicMaterial for brightness
+          setPos(portLight, -9, 11, 5); // Port (left) side, OUTSIDE accommodation
+          lightsGroup.add(portLight);
+          
+          const starboardLight = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0x00ff00 })); // Changed to MeshBasicMaterial
+          setPos(starboardLight, 9, 11, 5); // Starboard (right) side, OUTSIDE accommodation
+          lightsGroup.add(starboardLight);
+          
+          // Stern light (white)
+          const sternLight = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff })); // Changed to MeshBasicMaterial
+          setPos(sternLight, 0, 11, 25); // Stern
+          lightsGroup.add(sternLight);
+          
+          // Two white masthead lights (fore and aft, aft higher)
+          const masthead1 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff })); // Changed to MeshBasicMaterial
+          setPos(masthead1, 0, 16, -18); // Forward mast
+          lightsGroup.add(masthead1);
+          
+          const masthead2 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff })); // Changed to MeshBasicMaterial
+          setPos(masthead2, 0, 18, 5); // Aft mast (higher)
+          lightsGroup.add(masthead2);
+          break;
+          
+        case 'power_50_100':
+        case 'power_under50':
+          // Standard sidelights OUTSIDE accommodation
+          const portLight2 = new THREE.Mesh(lightGeom, 
+            new THREE.MeshPhongMaterial({ color:0xff0000, emissive:0xff0000, emissiveIntensity:1.0 }));
+          portLight2.position.set(-9, 11, 5);
+          lightsGroup.add(portLight2);
+          
+          const starboardLight2 = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0x00ff00, emissive:0x00ff00, emissiveIntensity:1.0 }));
+          starboardLight2.position.set(9, 11, 5);
+          lightsGroup.add(starboardLight2);
+          
+          const sternLight2 = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:1.0 }));
+          sternLight2.position.set(0, 11, 25);
+          lightsGroup.add(sternLight2);
+          
+          // Single white masthead light
+          const masthead = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:1.0 }));
+          masthead.position.set(0, 16, -10);
+          lightsGroup.add(masthead);
+          break;
+          
+        case 'ram':
+          console.log('[SWITCH] Matched RAM');
+          // RAM: Red-White-Red vertical all-round + sidelights + stern + 2 masthead lights (Rule 27c)
+          // Sidelights
+          const portLight3 = new THREE.Mesh(lightGeom, 
+            new THREE.MeshBasicMaterial({ color:0xff0000 }));
+          setPos(portLight3, -9, 11, 5);
+          lightsGroup.add(portLight3);
+          
+          const starboardLight3 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0x00ff00 }));
+          setPos(starboardLight3, 9, 11, 5);
+          lightsGroup.add(starboardLight3);
+          
+          // Stern light
+          const sternLight3 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff }));
+          setPos(sternLight3, 0, 11, 25);
+          lightsGroup.add(sternLight3);
+          
+          // Two white masthead lights in vertical line - HIGHEST position, on centerline
+          const ramMasthead1 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff }));
+          setPos(ramMasthead1, 0, 29, 5); // Upper masthead (highest)
+          lightsGroup.add(ramMasthead1);
+          
+          const ramMasthead2 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff }));
+          setPos(ramMasthead2, 0, 26, 5); // Lower masthead
+          lightsGroup.add(ramMasthead2);
+          
+          // RAM vertical all-round lights (Red-White-Red) - visible 360°, offset to port side
+          const ramRed1 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xff0000 }));
+          setPos(ramRed1, -3, 22, 5); // Top red, offset to port
+          lightsGroup.add(ramRed1);
+          
+          const ramWhite = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff }));
+          setPos(ramWhite, -3, 17, 5); // Middle white, offset to port, increased spacing
+          lightsGroup.add(ramWhite);
+          
+          const ramRed2 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xff0000 }));
+          setPos(ramRed2, -3, 12, 5); // Bottom red, offset to port
+          lightsGroup.add(ramRed2);
+          break;
+          
+        case 'cbd':
+          console.log('[SWITCH] Matched CBD');
+          // CBD: Red-Red-Red vertical + sidelights + stern (Rule 28)
+          const portLight4 = new THREE.Mesh(lightGeom, 
+            new THREE.MeshBasicMaterial({ color:0xff0000 }));
+          setPos(portLight4, -9, 11, 5);
+          lightsGroup.add(portLight4);
+          
+          const starboardLight4 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0x00ff00 }));
+          setPos(starboardLight4, 9, 11, 5);
+          lightsGroup.add(starboardLight4);
+          
+          const sternLight4 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xffffff }));
+          setPos(sternLight4, 0, 11, 25);
+          lightsGroup.add(sternLight4);
+          
+          // CBD vertical all-round lights (Red-Red-Red) - visible 360°, offset to port side
+          const cbdRed1 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xff0000 }));
+          setPos(cbdRed1, -3, 22, 5); // Top red, offset to port
+          lightsGroup.add(cbdRed1);
+          
+          const cbdRed2 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xff0000 }));
+          setPos(cbdRed2, -3, 17, 5); // Middle red, offset to port, increased spacing
+          lightsGroup.add(cbdRed2);
+          
+          const cbdRed3 = new THREE.Mesh(lightGeom,
+            new THREE.MeshBasicMaterial({ color:0xff0000 }));
+          setPos(cbdRed3, -3, 12, 5); // Bottom red, offset to port
+          lightsGroup.add(cbdRed3);
+          break;
+          
+        case 'towing':
+          // Towing: sidelights + stern + two masthead vertical + yellow towing light
+          const portLight5 = new THREE.Mesh(lightGeom, 
+            new THREE.MeshPhongMaterial({ color:0xff0000, emissive:0xff0000, emissiveIntensity:1.0 }));
+          portLight5.position.set(-9, 11, 5);
+          lightsGroup.add(portLight5);
+          
+          const starboardLight5 = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0x00ff00, emissive:0x00ff00, emissiveIntensity:1.0 }));
+          starboardLight5.position.set(9, 11, 5);
+          lightsGroup.add(starboardLight5);
+          
+          const sternLight5 = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:1.0 }));
+          sternLight5.position.set(0, 11, 25);
+          lightsGroup.add(sternLight5);
+          
+          const towMast1 = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:1.0 }));
+          towMast1.position.set(0, 20, -15); // Upper masthead
+          lightsGroup.add(towMast1);
+          
+          const towMast2 = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0xffffff, emissive:0xffffff, emissiveIntensity:1.0 }));
+          towMast2.position.set(0, 18, -15); // Lower masthead
+          lightsGroup.add(towMast2);
+          
+          const towYellow = new THREE.Mesh(lightGeom,
+            new THREE.MeshPhongMaterial({ color:0xffff00, emissive:0xffff00, emissiveIntensity:1.0 }));
+          towYellow.position.set(0, 22, 15); // Yellow above stern
+          lightsGroup.add(towYellow);
+          break;
+          
+        case 'nuc':
+          // NUC: Red-Red vertical only (no sidelights, no stern, no masthead per Rule 27)
+          const nucLightGeom = new THREE.SphereGeometry(0.6, 8, 8); // Larger
+          const nucRed1 = new THREE.Mesh(nucLightGeom,
+            new THREE.MeshPhongMaterial({ color:0xff0000, emissive:0xff0000, emissiveIntensity:1.5 }));
+          nucRed1.position.set(0, 24, 5); // Upper red
+          lightsGroup.add(nucRed1);
+          
+          const nucRed2 = new THREE.Mesh(nucLightGeom,
+            new THREE.MeshPhongMaterial({ color:0xff0000, emissive:0xff0000, emissiveIntensity:1.5 }));
+          nucRed2.position.set(0, 20, 5); // Lower red
+          lightsGroup.add(nucRed2);
+          break;
+      }
+      
+      // Hide lights by default (only visible at night)
+      lightsGroup.visible = false;
+      targetGroup.add(lightsGroup);
+    }
+
+    let sceneData = null;
+    let landLoaded = false;
+    async function fetchScene() {
+      try {
+        const res = await fetch('/api/scene');
+        const json = await res.json();
+        if (json.status === 'ok') {
+          sceneData = json.scene;
+          updateFromScene(sceneData);
+          
+          // Load land after first scene update (ensures ship position is available)
+          if (!landLoaded) {
+            fetchLandMesh();
+          }
+        }
+      } catch(e){ console.warn('Scene fetch failed', e); }
+    }
+
+    async function fetchLandMesh() {
+      if (landLoaded) return;
+      try {
+        console.log('[LAND MESH] Fetching from /api/chart_features (same as radar)...');
+        const res = await fetch('/api/chart_features');
+        console.log('[LAND MESH] Response status:', res.status, res.statusText);
+        const json = await res.json();
+        console.log('[LAND MESH] Response data:', json);
+        if (json.status === 'ok' && json.features) {
+          console.log(`[LAND MESH] Received ${json.features.length} land features`);
+          if (json.features.length === 0) {
+            console.warn('[LAND MESH] No land features in response!');
+          }
+          buildLandMeshes(json.features);
+          landLoaded = true;
+        } else {
+          console.error('[LAND MESH] Error in response:', json.message || 'Unknown error');
+        }
+      } catch(e){ 
+        console.error('[LAND MESH] Fetch failed:', e); 
+      }
+    }
+
+    function buildLandMeshes(features) {
+      if (!sceneData || !sceneData.ship) {
+        console.error('[LAND MESH] Cannot build land - no ship position available!');
+        return;
+      }
+      
+      // Building land mesh
+      
+      const landMat = new THREE.MeshPhongMaterial({ 
+        color: 0x5a8c6a, 
+        side: THREE.DoubleSide,
+        flatShading: true,
+        shininess: 5
+      });
+      
+      // Store reference for day/night updates
+      window.landMaterial = landMat;
+
+      let successCount = 0;
+      
+      features.forEach((feature, idx) => {
+        try {
+          const geomType = feature.type;
+          const coords = feature.coordinates;
+          
+          if (geomType === 'Polygon') {
+            buildPolygonMesh(coords, landMat);
+            successCount++;
+          } else if (geomType === 'MultiPolygon') {
+            for (const polygon of coords) {
+              buildPolygonMesh(polygon, landMat);
+              successCount++;
+            }
+          }
+        } catch (err) {
+          console.warn(`[LAND MESH] Failed to build feature ${idx}:`, err);
+        }
+      });
+      
+      // Land mesh complete
+      
+      // Add debug markers at land distances to help visualize
+      const markerMat = new THREE.MeshPhongMaterial({ color: 0xff0000, emissive: 0xff0000 });
+      
+      // Marker at 16km east (closest land bearing ~75°)
+      const angle1 = 75 * Math.PI / 180;
+      const marker1 = new THREE.Mesh(new THREE.BoxGeometry(200, 200, 200), markerMat);
+      marker1.position.set(Math.sin(angle1) * 16000, 100, -Math.cos(angle1) * 16000);
+      landGroup.add(marker1);
+      
+      // Marker at 30km east (bearing ~84°)
+      const angle2 = 84 * Math.PI / 180;
+      const marker2 = new THREE.Mesh(new THREE.BoxGeometry(200, 200, 200), markerMat);
+      marker2.position.set(Math.sin(angle2) * 30000, 100, -Math.cos(angle2) * 30000);
+      landGroup.add(marker2);
+      
+      // Debug markers added
+    }
+    
+    function buildPolygonMesh(rings, material) {
+      // Process each polygon ring (first is outer, rest are holes)
+      const outerRing = rings[0];
+      if (!outerRing || outerRing.length < 3) return;
+      
+      // Convert lat/lon coordinates to local 3D positions
+      const vertices = [];
+      let minDist = Infinity;
+      let maxDist = 0;
+      
+      for (const coord of outerRing) {
+        const [lon, lat] = coord;
+        const local = latLonToLocal(lat, lon);
+        vertices.push({ x: local.x, y: 0, z: local.z });
+        
+        const dist = Math.sqrt(local.x * local.x + local.z * local.z);
+        if (dist < minDist) minDist = dist;
+        if (dist > maxDist) maxDist = dist;
+      }
+      
+      // Log distance info for first few polygons
+      if (landGroup.children.length < 10) {
+        const centerX = vertices.reduce((sum, v) => sum + v.x, 0) / vertices.length;
+        const centerZ = vertices.reduce((sum, v) => sum + v.z, 0) / vertices.length;
+        const bearing = Math.atan2(centerX, -centerZ) * 180 / Math.PI;
+        const dist = Math.sqrt(centerX * centerX + centerZ * centerZ);
+        // Polygon added
+      }
+      
+      const vertexCount = vertices.length;
+      if (vertexCount < 3) return;
+      
+      // Create extruded geometry: duplicate vertices for top and bottom
+      const positions = new Float32Array(vertexCount * 2 * 3);
+      const indices = [];
+      
+      // Fill vertex positions
+      for (let i = 0; i < vertexCount; i++) {
+        // Bottom vertices (at sea level)
+        positions[i * 3] = vertices[i].x;
+        positions[i * 3 + 1] = 0;
+        positions[i * 3 + 2] = vertices[i].z;
+        
+        // Top vertices (elevated)
+        positions[(vertexCount + i) * 3] = vertices[i].x;
+        positions[(vertexCount + i) * 3 + 1] = 50; // 50m high land for visibility testing
+        positions[(vertexCount + i) * 3 + 2] = vertices[i].z;
+      }
+      
+      // Fan triangulation for top face (around first vertex)
+      for (let i = 1; i < vertexCount - 1; i++) {
+        indices.push(
+          vertexCount,      // First vertex (top)
+          vertexCount + i + 1,
+          vertexCount + i
+        );
+      }
+      
+      // Fan triangulation for bottom face (reversed winding)
+      for (let i = 1; i < vertexCount - 1; i++) {
+        indices.push(
+          0,          // First vertex (bottom)
+          i,
+          i + 1
+        );
+      }
+      
+      // Add side faces (walls connecting top and bottom)
+      for (let i = 0; i < vertexCount; i++) {
+        const next = (i + 1) % vertexCount;
+        const bottom1 = i;
+        const bottom2 = next;
+        const top1 = i + vertexCount;
+        const top2 = next + vertexCount;
+        
+        // Two triangles per side
+        indices.push(bottom1, bottom2, top1);
+        indices.push(bottom2, top2, top1);
+      }
+      
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geom.setIndex(indices);
+      geom.computeVertexNormals();
+
+      const mesh = new THREE.Mesh(geom, material);
+      landGroup.add(mesh);
+    }
+
+    function latLonToLocal(lat, lon) {
+      // Use ship's current position from ECDIS as origin (same as radar)
+      if (!sceneData || !sceneData.ship) {
+        console.warn('[LAND MESH] No scene data available for coordinate conversion!');
+        return { x: 0, z: 0 };
+      }
+      
+      const shipLat = sceneData.ship.lat || 38.15;
+      const shipLon = sceneData.ship.lon || -75.60;
+      
+      // Tangent plane approximation (same method as radar uses)
+      const dLat = (lat - shipLat) * Math.PI / 180;
+      const dLon = (lon - shipLon) * Math.PI / 180;
+      const R = 6371000; // Earth radius in meters
+      const x = R * dLon * Math.cos(shipLat * Math.PI / 180);
+      const z = -R * dLat; // negative z is north (Three.js convention)
+      return { x, z };
+    }
+
+    let origin = null;
+    
+    // Smooth camera interpolation state
+    let targetHeading = 0;
+    let currentHeading = 0;
+    let targetSpeed = 0;
+    let currentSpeed = 0;
+    const headingLerpSpeed = 0.05; // Slower = smoother heading changes
+    const speedLerpSpeed = 0.08;   // Slower = smoother speed changes
+    let swayEnabled = true;
+
+    function updateFromScene(data) {
+      document.getElementById('hdg').textContent = data.ship.heading.toFixed(0);
+      document.getElementById('spd').textContent = data.ship.speed.toFixed(1);
+      document.getElementById('tcount').textContent = data.targets.length;
+      
+      // Log once to see what vessel types we're receiving
+      if (!window.loggedVesselTypes && data.targets.length > 0) {
+        console.log('[BRIDGE] Received targets:', 
+          data.targets.map((t, i) => `T${i}: vessel_type=${t.vessel_type}`).join(', '));
+        window.loggedVesselTypes = true;
+      }
+      
+      // Updating targets
+
+      // Set target values for smooth interpolation
+      targetHeading = data.ship.heading;
+      targetSpeed = data.ship.speed;
+
+      // Update targets
+      while (targetsGroup.children.length < data.targets.length) {
+        // Create placeholder mesh - will be positioned in the forEach loop below
+        const placeholder = createTargetMesh();
+        placeholder.userData.needsInit = true; // Flag for initial positioning
+        targetsGroup.add(placeholder);
+        // Placeholder added
+      }
+      while (targetsGroup.children.length > data.targets.length) {
+        targetsGroup.remove(targetsGroup.children[targetsGroup.children.length-1]);
+      }
+      
+      // Processing targets
+      
+      data.targets.forEach((t, i) => {
+        let mesh = targetsGroup.children[i];
+        
+        if (!mesh) {
+          console.error(`[FOREACH] ERROR: No mesh at index ${i}!`);
+          return;
+        }
+        
+        // Update or create mesh with correct vessel type
+        const vesselType = t.vessel_type || 'power_100plus';
+        
+        if (!mesh.userData.vesselType || mesh.userData.vesselType !== vesselType || mesh.userData.needsInit) {
+          // Recreate mesh with new vessel type or position initial mesh
+          console.log(`[CREATE] Target ${i}: Creating mesh with vesselType="${vesselType}"`);
+          
+          if (mesh.userData.needsInit) {
+            // Reusing placeholder mesh - remove old lights and add new ones with correct type
+            const oldLights = mesh.getObjectByName('navigationLights');
+            if (oldLights) {
+              mesh.remove(oldLights);
+              console.log(`[CREATE] Removed old lights from placeholder`);
+            }
+            // Add new lights with correct vessel type
+            addNavigationLights(mesh, vesselType);
+            const newLights = mesh.getObjectByName('navigationLights');
+            console.log(`[CREATE] Added new lights: count=${newLights ? newLights.children.length : 0}`);
+            mesh.userData.vesselType = vesselType;
+            delete mesh.userData.needsInit;
+          } else {
+            // Create completely new mesh
+            const newMesh = createTargetMesh(vesselType);
+            targetsGroup.remove(mesh);
+            targetsGroup.add(newMesh);
+            mesh = newMesh;
+            newMesh.userData.vesselType = vesselType;
+          }
+          
+          // Check if lights were added
+          const lights = newMesh.getObjectByName('navigationLights');
+          console.log(`[CREATE] Target ${i}: Lights group exists=${!!lights}, light count=${lights ? lights.children.length : 0}`);
+          
+          // Position target using range/bearing directly (convert to meters and 3D coords)
+          if (t.range != null && t.bearing != null) {
+            // Use range/bearing from radar (more reliable than lat/lon conversion)
+            const rangeMeters = t.range * 1852; // nautical miles to meters
+            const bearingRad = t.bearing * Math.PI / 180;
+            // X = East (positive right), Z = North (negative forward)
+            const x = rangeMeters * Math.sin(bearingRad);
+            const z = -rangeMeters * Math.cos(bearingRad);
+            newMesh.position.set(x, 2, z);
+            // Positioned by range/bearing
+            
+          } else if (t.lat != null && t.lon != null) {
+            const local = latLonToLocal(t.lat, t.lon);
+            newMesh.position.set(local.x, 2, local.z);
+            const dist = Math.sqrt(local.x*local.x + local.z*local.z);
+            // Positioned by lat/lon
+          } else {
+            // Convert radar canvas coords to 3D: X right, Z forward (negative Y)
+            newMesh.position.set((t.x-300)*2, 2, -(t.y-300)*2);
+            // Positioned by canvas
+          }
+          newMesh.rotation.y = THREE.MathUtils.degToRad(-t.course);
+          
+          // Target updated
+        } else {
+          // Update position and rotation only
+          if (t.range != null && t.bearing != null) {
+            // Use range/bearing from radar (more reliable than lat/lon conversion)
+            const rangeMeters = t.range * 1852; // nautical miles to meters
+            const bearingRad = t.bearing * Math.PI / 180;
+            const x = rangeMeters * Math.sin(bearingRad);
+            const z = -rangeMeters * Math.cos(bearingRad);
+            mesh.position.set(x, 2, z);
+          } else if (t.lat != null && t.lon != null) {
+            const local = latLonToLocal(t.lat, t.lon);
+            mesh.position.set(local.x, 2, local.z);
+          } else {
+            // Convert radar canvas coords to 3D: X right, Z forward (negative Y)
+            mesh.position.set((t.x-300)*2, 2, -(t.y-300)*2);
+          }
+          mesh.rotation.y = THREE.MathUtils.degToRad(-t.course);
+        }
+        
+        // Update navigation light visibility based on day/night
+        const lights = mesh.getObjectByName('navigationLights');
+        if (lights) {
+          lights.visible = isNight;
+          if (isNight) {
+            // Initialize all individual lights to visible in night mode
+            lights.children.forEach(light => light.visible = true);
+          }
+        }
+      });
+    }
+    
+    function smoothCameraUpdate() {
+      // Smooth heading interpolation with angle wrapping
+      let headingDiff = targetHeading - currentHeading;
+      
+      // Normalize angle difference to [-180, 180]
+      while (headingDiff > 180) headingDiff -= 360;
+      while (headingDiff < -180) headingDiff += 360;
+      
+      currentHeading += headingDiff * headingLerpSpeed;
+      
+      // Normalize current heading to [0, 360]
+      currentHeading = (currentHeading + 360) % 360;
+      
+      // Apply smooth heading to camera base combined with manual look rotation
+      cameraBase.rotation.y = THREE.MathUtils.degToRad(-currentHeading) + cameraRotationY;
+      
+      // Smooth speed interpolation
+      currentSpeed += (targetSpeed - currentSpeed) * speedLerpSpeed;
+      
+      // Optional: Add gentle camera sway based on speed (simulates ship motion)
+      if (swayEnabled) {
+        const swayAmount = currentSpeed * 0.0002;
+        const time = Date.now() * 0.001;
+        cameraBase.position.x = Math.sin(time * 0.5) * swayAmount;
+        cameraBase.position.z = Math.cos(time * 0.3) * swayAmount;
+      } else {
+        cameraBase.position.x = 0;
+        cameraBase.position.z = 0;
+      }
+    }
+
+    // Poll scene at 2 Hz
+    setInterval(fetchScene, 500);
+    fetchScene();
+
+    // Binocular view toggle
+    const bino = document.getElementById('binocularOverlay');
+    let binocular = false;
+    document.getElementById('toggleBinocular').onclick = () => {
+      binocular = !binocular;
+      bino.style.display = binocular ? 'block' : 'none';
+      camera.fov = binocular ? 20 : 60;
+      camera.updateProjectionMatrix();
+    };
+
+    // Day/Night toggle
+    document.getElementById('toggleDayNight').onclick = () => { isNight = !isNight; applyLightingMode(); };
+
+    // Ship sway toggle
+    document.getElementById('toggleSway').onclick = function() {
+      swayEnabled = !swayEnabled;
+      this.textContent = swayEnabled ? 'SHIP SWAY: ON' : 'SHIP SWAY: OFF';
+      this.classList.toggle('active', swayEnabled);
+    };
+
+    // Reset camera
+    document.getElementById('resetCam').onclick = () => {
+      cameraRotationY = 0; // Reset manual rotation
+      camera.lookAt(0, 0, -100); // Reset to look forward
+    };
+
+    // Navigation ribbon handlers
+    document.getElementById('nav-main').onclick = () => { window.location.href = '/'; };
+    document.getElementById('nav-radar').onclick = () => { window.location.href = '/radar'; };
+    document.getElementById('nav-ecdis').onclick = () => { window.location.href = 'http://localhost:5000/'; };
+    document.getElementById('nav-bridge').onclick = () => { window.location.href = '/bridge_controls'; };
+    document.getElementById('nav-exit').onclick = () => {
+      if (confirm('Exit simulation and return to main menu?')) {
+        localStorage.setItem('sim_exit', Date.now());
+        window.location.href = '/';
+      }
+    };
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Render loop with wave animation
+    let time = 0;
+    function animate(){
+      requestAnimationFrame(animate);
+      time += 0.016; // ~60fps
+      
+      // Animate water waves
+      animateWaterWaves(time);
+      
+      // Update navigation light visibility based on viewing angle
+      if (isNight) {
+        updateNavigationLightVisibility();
+      }
+      
+      smoothCameraUpdate(); // Smooth heading/speed interpolation
+      renderer.render(scene, camera);
+    }
+    
+    // Update navigation light visibility based on COLREGS sectors
+    function updateNavigationLightVisibility() {
+      const cameraWorldPos = new THREE.Vector3();
+      camera.getWorldPosition(cameraWorldPos);
+      
+      // Update target vessel lights
+      targetsGroup.children.forEach(target => {
+        const lightsGroup = target.getObjectByName('navigationLights');
+        if (!lightsGroup || !lightsGroup.visible) return;
+        
+        updateLightSectorsForVessel(target, lightsGroup, cameraWorldPos);
+      });
+      
+      // Update own ship lights (when visible to ourselves from camera)
+      const ownLights = shipGroup.getObjectByName('navigationLights');
+      if (ownLights && ownLights.visible) {
+        updateLightSectorsForVessel(shipGroup, ownLights, cameraWorldPos);
+      }
+    }
+    
+    function updateLightSectorsForVessel(vessel, lightsGroup, cameraWorldPos) {
+      // Get vessel world position and rotation
+      const vesselWorldPos = new THREE.Vector3();
+      vessel.getWorldPosition(vesselWorldPos);
+      
+      const vesselWorldQuat = new THREE.Quaternion();
+      vessel.getWorldQuaternion(vesselWorldQuat);
+      
+      // Calculate relative bearing from vessel to camera
+      const toCamera = new THREE.Vector3().subVectors(cameraWorldPos, vesselWorldPos);
+      toCamera.y = 0; // Project to horizontal plane
+      toCamera.normalize();
+      
+      // Get vessel's forward direction
+      const vesselForward = new THREE.Vector3(0, 0, -1);
+      vesselForward.applyQuaternion(vesselWorldQuat);
+      vesselForward.y = 0;
+      vesselForward.normalize();
+      
+      // Calculate relative bearing in degrees (0° = dead ahead, positive = starboard)
+      let angle = Math.atan2(toCamera.x, toCamera.z) - Math.atan2(vesselForward.x, vesselForward.z);
+      angle = angle * 180 / Math.PI;
+      
+      // Normalize to -180 to 180
+      while (angle > 180) angle -= 360;
+      while (angle < -180) angle += 360;
+      
+      // INVERT the angle - we need the bearing FROM camera TO vessel, not vessel TO camera
+      angle = -angle;
+      
+      // Update each light based on its sector
+      lightsGroup.children.forEach((light, idx) => {
+        const pos = light.position;
+        let visible = false;
+        
+        // Skip backscatter glow (always visible when lights are on)
+        if (light.name === 'backscatterGlow') {
+          light.visible = true;
+          return;
+        }
+        
+        const r = light.material.color.r;
+        const g = light.material.color.g;
+        const b = light.material.color.b;
+        
+        // Determine light type by color and position
+        if (r > 0.9 && g < 0.1 && b < 0.1) {
+          // Pure red light - check if port sidelight or all-round signal
+          if (pos.x < -70) {
+            // Port sidelight (red): visible from 112.5° port through ahead
+            visible = (angle >= -112.5 && angle <= 0);
+          } else if (pos.x > -40 && pos.x < -10) {
+            // All-round red signal offset to port (RAM, CBD vertical lights) - visible 360°
+            visible = true;
+          } else {
+            // Centerline red (shouldn't exist, but default to all-round)
+            visible = true;
+          }
+        } else if (g > 0.9 && r < 0.1 && b < 0.1) {
+          // Pure green starboard sidelight: visible from dead ahead to 112.5° starboard
+          visible = (angle >= 0 && angle <= 112.5);
+        } else if (r > 0.9 && g > 0.9 && b > 0.9) {
+          // White light - check position to determine if masthead, stern, or all-round
+          if (pos.z > 150) {
+            // Stern light (scaled z > 15*10): 135° arc centered on stern
+            const sternAngle = Math.abs(angle - 180);
+            visible = sternAngle <= 67.5 || Math.abs(angle) >= 112.5;
+          } else if (pos.y > 240) {
+            // Masthead light (highest position Y > 24*10): 225° forward arc
+            visible = (angle >= -112.5 && angle <= 112.5);
+          } else if (pos.x > -40 && pos.x < -10) {
+            // All-round white offset to port (RAM middle light) - visible 360°
+            visible = true;
+          } else {
+            // Centerline masthead light: 225° forward arc (not visible from astern)
+            visible = (angle >= -112.5 && angle <= 112.5);
+          }
+        } else if (r > 0.9 && g > 0.9 && b < 0.1) {
+          // Yellow towing light: 135° stern arc
+          const sternAngle = Math.abs(angle - 180);
+          visible = sternAngle <= 67.5 || Math.abs(angle) >= 112.5;
+        }
+        
+        light.visible = visible;
+      });
+    }
+    
+    // Water wave animation - EXTREME waves for maximum visibility
+    function animateWaterWaves(t) {
+      const positions = water.geometry.attributes.position;
+      const waveSpeed = 2.0;
+      const waveHeight = 15.0; // MASSIVE waves
+      const waveFreq = 0.02; // Longer wavelengths
+      
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i);
+        const z = positions.getZ(i);
+        
+        // Simpler, more dramatic waves
+        const wave1 = Math.sin(x * waveFreq + t * waveSpeed) * waveHeight;
+        const wave2 = Math.cos(z * waveFreq * 0.8 - t * waveSpeed * 1.2) * waveHeight * 0.7;
+        
+        const newY = waterOriginalY[i] + wave1 + wave2;
+        positions.setY(i, newY);
+      }
+      
+      positions.needsUpdate = true;
+      water.geometry.computeVertexNormals(); // Update lighting
+    }
+    
+    // Initial test render
+    renderer.render(scene, camera);
+    console.log('[3D] Initial render complete, starting animation loop with water waves');
+    
+    animate();
+    console.log('[3D] Scene initialized, renderer started');
+    
+    // Navigation ribbon handlers
+    const go = (url) => window.location.href = url;
+    
+    document.getElementById('nav-main')?.addEventListener('click', () => {
+      go('http://127.0.0.1:5001/');
+    });
+    
+    document.getElementById('nav-radar')?.addEventListener('click', () => {
+      go('http://127.0.0.1:5001/radar');
+    });
+    
+    document.getElementById('nav-ecdis')?.addEventListener('click', () => {
+      go('http://127.0.0.1:5000/');
+    });
+    
+    document.getElementById('nav-3d')?.addEventListener('click', () => {
+      // Already on this page
+      // Already on bridge view
+    });
+    
+    document.getElementById('nav-bridge')?.addEventListener('click', () => {
+      go('http://127.0.0.1:5001/bridge_controls');
+    });
+    
+    document.getElementById('nav-exit')?.addEventListener('click', () => {
+      if (!confirm('Exit simulation? This will stop the simulation.')) {
+        return;
+      }
+      localStorage.setItem('sim_running', 'false');
+      localStorage.setItem('sim_exit', Date.now().toString());
+      setTimeout(() => window.close() || go('http://127.0.0.1:5001/'), 100);
+    });
+  </script>
+</body>
+</html>
