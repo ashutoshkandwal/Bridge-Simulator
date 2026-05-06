@@ -1,0 +1,43 @@
+OFFLINE LEAFLET SETUP INSTRUCTIONS
+===================================
+
+The ECDIS viewer currently loads Leaflet from CDN (requires internet).
+To make it fully offline, follow these steps:
+
+OPTION 1: Download Leaflet Locally (Recommended)
+-------------------------------------------------
+1. Download Leaflet 1.9.4:
+   https://leafletjs-cdn.s3.amazonaws.com/content/leaflet/v1.9.4/leaflet.zip
+
+2. Extract the contents to this directory (web/static/)
+   You should have:
+   - web/static/leaflet.css
+   - web/static/leaflet.js
+   - web/static/images/ (with marker icons)
+
+3. Update web/ecdis_viewer.html:
+   Replace:
+     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+   With:
+     <link rel="stylesheet" href="/static/leaflet.css" />
+     <script src="/static/leaflet.js"></script>
+
+4. Update web/server.py to serve static files:
+   Add Flask static folder configuration (already configured)
+
+
+OPTION 2: Use Simple Map Library (No External Dependencies)
+------------------------------------------------------------
+If you don't need interactive pan/zoom, I can implement a simple canvas-based
+chart renderer that doesn't require any external libraries.
+
+
+CURRENT STATUS
+--------------
+✓ ENC chart data is local (US4MD20M.000)
+✓ Flask server is local (127.0.0.1)
+✓ WebSocket is local
+✗ Leaflet loaded from CDN (needs internet for first load)
+
+After implementing Option 1, the system will be 100% offline.

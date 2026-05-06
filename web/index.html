@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Maritime Bridge Simulator - ECDIS, Radar ARPA, and Navigation Training">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>Maritime Bridge Simulator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        header {
+            text-align: center;
+            padding: 12px 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 1.4em;
+            color: #4ecca3;
+            text-shadow: 0 0 20px rgba(78, 204, 163, 0.5);
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            font-size: 0.85em;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+
+        .status-bar {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 15px;
+            border: 2px solid #4ecca3;
+            font-size: 0.8em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+            background: #f00;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #0f0;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+            h1 {
+                font-size: 1.3em;
+            }
+        }
+
+        .panel {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #4ecca3;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 4px 16px rgba(78, 204, 163, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .panel:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(78, 204, 163, 0.4);
+        }
+
+        .panel-title {
+            font-size: 1em;
+            color: #4ecca3;
+            margin-bottom: 8px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .form-group {
+            margin-bottom: 6px;
+        }
+
+        label {
+            display: block;
+            color: #4ecca3;
+            margin-bottom: 3px;
+            font-weight: bold;
+            font-size: 0.75em;
+        }
+
+        input[type="number"],
+        input[type="text"] {
+            width: 100%;
+            padding: 6px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #4ecca3;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 0.9em;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #4ecca3;
+            box-shadow: 0 0 10px rgba(78, 204, 163, 0.5);
+        }
+
+        .input-hint {
+            font-size: 0.65em;
+            color: #888;
+            margin-top: 1px;
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+            border: 2px solid #4ecca3;
+            border-radius: 6px;
+            background: linear-gradient(135deg, rgba(78, 204, 163, 0.2), rgba(78, 204, 163, 0.1));
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, rgba(78, 204, 163, 0.4), rgba(78, 204, 163, 0.2));
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(78, 204, 163, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4ecca3, #3da88a);
+            border-color: #4ecca3;
+            grid-column: 1 / -1;
+            font-size: 1.1em;
+            padding: 14px;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5efcb3, #4ecca3);
+            box-shadow: 0 8px 30px rgba(78, 204, 163, 0.6);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.3), rgba(220, 53, 69, 0.2));
+            border-color: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.5), rgba(220, 53, 69, 0.3));
+        }
+        
+        .btn-fullscreen {
+            background: linear-gradient(135deg, rgba(255, 170, 0, 0.3), rgba(255, 170, 0, 0.2));
+            border-color: #ffaa00;
+            padding: 14px;
+            font-size: 1.1em;
+        }
+
+        .btn-fullscreen:hover {
+            background: linear-gradient(135deg, rgba(255, 170, 0, 0.5), rgba(255, 170, 0, 0.3));
+            box-shadow: 0 8px 30px rgba(255, 170, 0, 0.4);
+        }
+
+        .viewer-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .viewer-card {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #4ecca3;
+            border-radius: 8px;
+            padding: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .viewer-card:hover {
+            transform: scale(1.03);
+            box-shadow: 0 4px 20px rgba(78, 204, 163, 0.5);
+            background: rgba(78, 204, 163, 0.1);
+        }
+
+        .viewer-card h3 {
+            color: #4ecca3;
+            margin-bottom: 4px;
+            font-size: 0.95em;
+        }
+
+        .viewer-card p {
+            color: #aaa;
+            font-size: 0.7em;
+        }
+
+        .viewer-card .icon {
+            font-size: 1.8em;
+            margin-bottom: 5px;
+        }
+
+        .info-section {
+            background: rgba(0, 0, 0, 0.3);
+            border: 2px solid #4ecca3;
+            border-radius: 8px;
+            padding: 8px;
+            margin-top: 10px;
+        }
+
+        .info-section h2 {
+            color: #4ecca3;
+            margin-bottom: 6px;
+            font-size: 0.95em;
+        }
+
+        .info-section ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-section li {
+            padding: 3px 0;
+            font-size: 0.75em;
+            color: #ccc;
+            border-bottom: 1px solid rgba(78, 204, 163, 0.2);
+        }
+
+        .info-section li:last-child {
+            border-bottom: none;
+        }
+
+        .info-section li:before {
+            content: "▸ ";
+            color: #4ecca3;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 8px;
+            margin-top: 12px;
+            color: #888;
+            border-top: 1px solid rgba(78, 204, 163, 0.2);
+            font-size: 0.75em;
+        }
+
+        .notification {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            padding: 10px 18px;
+            background: rgba(78, 204, 163, 0.9);
+            color: #000;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            font-weight: bold;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .notification.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        @media (max-width: 600px) {
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚓ MARITIME BRIDGE SIMULATOR ⚓</h1>
+            <p class="subtitle">Professional Navigation, ECDIS & Radar ARPA Training System</p>
+            <div class="status-bar">
+                <span class="status-indicator" id="status-indicator"></span>
+                <span id="status-text">Connecting to simulator...</span>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <!-- Ship Configuration -->
+            <div class="panel">
+                <h2 class="panel-title">⛴️ Ship Configuration</h2>
+                <div class="form-group">
+                    <label for="lat">Latitude (°N)</label>
+                    <input type="number" id="lat" value="38.13" step="0.01">
+                    <div class="input-hint">Range: -90 to 90</div>
+                </div>
+                <div class="form-group">
+                    <label for="lon">Longitude (°E)</label>
+                    <input type="number" id="lon" value="-75.93" step="0.01">
+                    <div class="input-hint">Range: -180 to 180</div>
+                </div>
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="hdg">Heading (°)</label>
+                        <input type="number" id="hdg" value="45" min="0" max="360">
+                    </div>
+                    <div class="form-group">
+                        <label for="spd">Speed (kn)</label>
+                        <input type="number" id="spd" value="12" min="0" max="30" step="0.1">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Environmental Conditions -->
+            <div class="panel">
+                <h2 class="panel-title">🌊 Environment</h2>
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="wind_dir">Wind Dir (°T)</label>
+                        <input type="number" id="wind_dir" value="0" min="0" max="360">
+                    </div>
+                    <div class="form-group">
+                        <label for="wind_spd">Wind Speed (kn)</label>
+                        <input type="number" id="wind_spd" value="0" min="0" max="50">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Target 1 Configuration -->
+            <div class="panel">
+                <h2 class="panel-title">🎯 Target 1</h2>
+                <div class="form-group">
+                    <label for="t1_type">Vessel Type</label>
+                    <select id="t1_type">
+                        <option value="power_100plus">Power-driven vessel >100m</option>
+                        <option value="power_50_100">Power-driven vessel 50-100m</option>
+                        <option value="power_under50">Power-driven vessel <50m</option>
+                        <option value="ram" selected>RAM (Restricted Maneuverability)</option>
+                        <option value="cbd">CBD (Constrained by Draft)</option>
+                        <option value="towing">Towing vessel</option>
+                        <option value="fishing">Fishing vessel</option>
+                        <option value="sailing">Sailing vessel</option>
+                        <option value="nuc">NUC (Not Under Command)</option>
+                    </select>
+                </div>
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="t1_rng">Range (NM)</label>
+                        <input type="number" id="t1_rng" value="3.0" step="0.1" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="t1_brg">Bearing (°)</label>
+                        <input type="number" id="t1_brg" value="45" min="0" max="360">
+                    </div>
+                </div>
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="t1_crs">Course (°)</label>
+                        <input type="number" id="t1_crs" value="180" min="0" max="360">
+                    </div>
+                    <div class="form-group">
+                        <label for="t1_spd">Speed (kn)</label>
+                        <input type="number" id="t1_spd" value="8" step="0.1" min="0">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Target 2 Configuration -->
+            <div class="panel">
+                <h2 class="panel-title">🎯 Target 2</h2>
+                <div class="form-group">
+                    <label for="t2_type">Vessel Type</label>
+                    <select id="t2_type">
+                        <option value="power_100plus" selected>Power-driven vessel >100m</option>
+                        <option value="power_50_100">Power-driven vessel 50-100m</option>
+                        <option value="power_under50">Power-driven vessel <50m</option>
+                        <option value="ram">RAM (Restricted Maneuverability)</option>
+                        <option value="cbd">CBD (Constrained by Draft)</option>
+                        <option value="towing">Towing vessel</option>
+                        <option value="fishing">Fishing vessel</option>
+                        <option value="sailing">Sailing vessel</option>
+                        <option value="nuc">NUC (Not Under Command)</option>
+                    </select>
+                </div>
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="t2_rng">Range (NM)</label>
+                        <input type="number" id="t2_rng" value="5.0" step="0.1" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="t2_brg">Bearing (°)</label>
+                        <input type="number" id="t2_brg" value="315" min="0" max="360">
+                    </div>
+                </div>
+                <div class="two-column">
+                    <div class="form-group">
+                        <label for="t2_crs">Course (°)</label>
+                        <input type="number" id="t2_crs" value="90" min="0" max="360">
+                    </div>
+                    <div class="form-group">
+                        <label for="t2_spd">Speed (kn)</label>
+                        <input type="number" id="t2_spd" value="12" step="0.1" min="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="panel">
+            <div class="button-grid">
+                <button class="btn btn-fullscreen" id="fullscreen-btn">⛶ Fullscreen</button>
+                <button class="btn btn-primary" id="start-sim">🚀 Start Simulation</button>
+                <button class="btn" id="save-scenario">💾 Save Scenario</button>
+                <button class="btn" id="load-scenario">📂 Load Scenario</button>
+                <button class="btn btn-danger" id="exit-sim">✖ Exit Simulation</button>
+            </div>
+        </div>
+
+        <!-- Viewer Cards -->
+        <div class="viewer-cards">
+            <div class="viewer-card" id="open-radar">
+                <div class="icon">📡</div>
+                <h3>Radar ARPA</h3>
+                <p>Marine radar with automatic tracking and collision avoidance</p>
+            </div>
+            <div class="viewer-card" id="open-ecdis">
+                <div class="icon">🗺️</div>
+                <h3>ECDIS</h3>
+                <p>Electronic Chart Display and Information System</p>
+            </div>
+            <div class="viewer-card" id="open-bridge">
+                <div class="icon">⚙️</div>
+                <h3>Bridge Controls</h3>
+                <p>Gyro compass, rudder, telegraph, and navigation instruments</p>
+            </div>
+            <div class="viewer-card" id="open-3d">
+                <div class="icon">🌊</div>
+                <h3>3D Bridge View</h3>
+                <p>Immersive 3D bridge demo with land, targets, and binocular mode</p>
+            </div>
+        </div>
+
+        <!-- Information Section -->
+        <div class="info-section">
+            <h2>📋 Features</h2>
+            <ul>
+                <li>Full ARPA radar simulation with target tracking and CPA/TCPA alarms</li>
+                <li>Electronic Chart Display (ECDIS) with NOAA ENC chart support</li>
+                <li>Realistic bridge instruments: Gyro compass, rudder, engine telegraph</li>
+                <li>Configurable targets with independent course and speed</li>
+                <li>Wind and weather effects on sea clutter</li>
+                <li>True motion and relative motion display modes</li>
+                <li>North-up and course-up orientation</li>
+                <li>Guard zones and automatic target acquisition</li>
+            </ul>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Maritime Bridge Simulator | Version 1.0</p>
+            <p>For training purposes only</p>
+        </footer>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // WebSocket connection
+        let ws = null;
+        const WS_URL = 'ws://localhost:5001/bridge';
+        
+        // Detect if this is a fresh load (not navigation back from ECDIS)
+        // Use sessionStorage to track if we've been here this session
+        const isSessionActive = sessionStorage.getItem('session_active') === 'true';
+        
+        if (!isSessionActive) {
+            // Fresh load - reset simulation state
+            localStorage.setItem('sim_running', 'false');
+            sessionStorage.setItem('session_active', 'true');
+        }
+        
+        // Check if simulation is running (persistent during navigation within session)
+        let simulationRunning = localStorage.getItem('sim_running') === 'true';
+        
+        // Update button state on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('start-sim');
+            if (simulationRunning) {
+                btn.textContent = '⏸ Stop Simulation';
+                btn.classList.add('btn-danger');
+            } else {
+                btn.textContent = '🚀 Start Simulation';
+                btn.classList.remove('btn-danger');
+            }
+        });
+        
+        // Track opened viewer windows
+        let viewerWindows = {
+            radar: null,
+            bridge: null,
+            ecdis: null
+        };
+
+        // Load saved scenario from localStorage
+        function loadFromStorage() {
+            const saved = localStorage.getItem('simulator_scenario');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    Object.keys(data).forEach(key => {
+                        const input = document.getElementById(key);
+                        if (input) {
+                            // For select dropdowns, set the value directly
+                            if (input.tagName === 'SELECT') {
+                                input.value = data[key];
+                            } else {
+                                input.value = data[key];
+                            }
+                        }
+                    });
+                    showNotification('Scenario loaded from previous session');
+                } catch (e) {
+                    console.error('Failed to load scenario:', e);
+                }
+            }
+        }
+
+        // Save scenario to localStorage
+        function saveToStorage() {
+            const data = {};
+            ['lat', 'lon', 'hdg', 'spd', 'wind_dir', 'wind_spd',
+             't1_rng', 't1_brg', 't1_crs', 't1_spd',
+             't2_rng', 't2_brg', 't2_crs', 't2_spd'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) data[id] = input.value;
+            });
+            // Save vessel types (select dropdowns)
+            const t1_type = document.getElementById('t1_type');
+            const t2_type = document.getElementById('t2_type');
+            if (t1_type) data['t1_type'] = t1_type.value;
+            if (t2_type) data['t2_type'] = t2_type.value;
+            localStorage.setItem('simulator_scenario', JSON.stringify(data));
+            showNotification('Scenario saved successfully!');
+        }
+
+        // ----- Live ship update wiring -----
+        function getShipFromInputs() {
+            const getNum = (id) => {
+                const el = document.getElementById(id);
+                if (!el) return 0;
+                const v = parseFloat(el.value);
+                return isNaN(v) ? 0 : v;
+            };
+            return {
+                lat: getNum('lat'),
+                lon: getNum('lon'),
+                hdg: getNum('hdg'),
+                spd: getNum('spd')
+            };
+        }
+
+        let shipUpdateTimer = null;
+        function postSetShipDebounced(delay = 250) {
+            if (!simulationRunning) return; // only live-update when running
+            if (shipUpdateTimer) clearTimeout(shipUpdateTimer);
+            shipUpdateTimer = setTimeout(() => {
+                const payload = getShipFromInputs();
+                fetch('/api/set_ship', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(r => r.json())
+                .then(res => {
+                    // Optional: light console log for diagnostics
+                    console.debug('[MENU] set_ship ok', payload);
+                })
+                .catch(err => console.error('[MENU] set_ship error', err));
+            }, delay);
+        }
+
+        function attachShipInputListeners() {
+            ['lat','lon','hdg','spd'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.addEventListener('input', () => postSetShipDebounced(300));
+                el.addEventListener('change', () => postSetShipDebounced(0));
+            });
+        }
+
+        // Connect to WebSocket
+        function connectWebSocket() {
+            ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                console.log('[WS] Connected to simulator');
+                document.getElementById('status-indicator').classList.add('connected');
+                document.getElementById('status-text').textContent = 'Simulator Ready';
+            };
+
+            ws.onclose = () => {
+                console.log('[WS] Disconnected from simulator');
+                document.getElementById('status-indicator').classList.remove('connected');
+                document.getElementById('status-text').textContent = 'Simulator Offline - Retrying...';
+                setTimeout(connectWebSocket, 2000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('[WS] Error:', error);
+            };
+        }
+
+        // Show notification
+        function showNotification(message) {
+            const notif = document.getElementById('notification');
+            notif.textContent = message;
+            notif.classList.add('show');
+            setTimeout(() => {
+                notif.classList.remove('show');
+            }, 3000);
+        }
+
+        // Toggle simulation state
+        function toggleSimulation() {
+            const btn = document.getElementById('start-sim');
+            
+            if (!simulationRunning) {
+                // Start simulation
+                saveToStorage();
+                
+                // Collect scenario data
+                const scenarioData = {};
+                ['lat', 'lon', 'hdg', 'spd', 'wind_dir', 'wind_spd',
+                 't1_rng', 't1_brg', 't1_crs', 't1_spd',
+                 't2_rng', 't2_brg', 't2_crs', 't2_spd'].forEach(id => {
+                    const input = document.getElementById(id);
+                    if (input) scenarioData[id] = parseFloat(input.value) || 0;
+                });
+                
+                // Add vessel types (string values, not numeric)
+                const t1_type = document.getElementById('t1_type');
+                const t2_type = document.getElementById('t2_type');
+                if (t1_type) scenarioData['t1_type'] = t1_type.value;
+                if (t2_type) scenarioData['t2_type'] = t2_type.value;
+                
+                console.log('[MENU] Starting simulation with vessel types:', scenarioData.t1_type, scenarioData.t2_type);
+                
+                // Send scenario to backend to initialize simulation
+                fetch('/api/init_simulation', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(scenarioData)
+                })
+                .then(response => response.json())
+                .then(result => {
+                    console.log('[MENU] Simulation initialized:', result);
+                    // Ensure live state also pushed to runtime updater
+                    fetch('/api/set_ship', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            lat: scenarioData.lat,
+                            lon: scenarioData.lon,
+                            hdg: scenarioData.hdg,
+                            spd: scenarioData.spd
+                        })
+                    }).catch(() => {});
+                    showNotification('Simulation initialized - starting...');
+                })
+                .catch(err => {
+                    console.error('[MENU] Init error:', err);
+                    showNotification('Error initializing simulation');
+                });
+                
+                // Broadcast that simulation is starting
+                localStorage.setItem('sim_running', 'true');
+                localStorage.setItem('sim_event', Date.now().toString());
+                simulationRunning = true;
+                
+                // Navigate this window to ECDIS
+                showNotification('Starting simulation - navigating to ECDIS...');
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:5000/';
+                }, 500);
+            } else {
+                // Stop simulation via broadcast
+                localStorage.setItem('sim_running', 'false');
+                localStorage.setItem('sim_exit', Date.now().toString());
+                
+                // Update button
+                btn.textContent = '🚀 Start Simulation';
+                btn.classList.remove('btn-danger');
+                simulationRunning = false;
+                showNotification('Simulation stopped');
+            }
+        }
+
+        // Start/Stop simulation
+        document.getElementById('start-sim').addEventListener('click', toggleSimulation);
+
+        // Fullscreen button
+        document.getElementById('fullscreen-btn').addEventListener('click', () => {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+                // Enter fullscreen
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => {
+                        console.log('Fullscreen request failed:', err);
+                        showNotification('Fullscreen mode not supported');
+                    });
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                } else {
+                    showNotification('Fullscreen mode not supported in this browser');
+                }
+            } else {
+                // Exit fullscreen
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        });
+
+        // Save scenario
+        document.getElementById('save-scenario').addEventListener('click', saveToStorage);
+
+        // Load scenario
+        document.getElementById('load-scenario').addEventListener('click', loadFromStorage);
+
+        // Exit simulation
+        document.getElementById('exit-sim').addEventListener('click', () => {
+            if (confirm('Exit the simulator? This will close the application.')) {
+                // Broadcast exit to all viewer windows
+                localStorage.setItem('sim_exit', Date.now().toString());
+                localStorage.setItem('sim_running', 'false');
+                sessionStorage.removeItem('session_active');
+                showNotification('Shutting down simulator...');
+                
+                // Try to close this window
+                setTimeout(() => {
+                    window.close();
+                    // If window.close() doesn't work (some browsers block it), show message
+                    setTimeout(() => {
+                        alert('Please close this browser tab/window manually.');
+                    }, 200);
+                }, 500);
+            }
+        });
+
+        // Clear session when page is unloaded (browser/tab closed)
+        window.addEventListener('beforeunload', () => {
+            // Only clear session if simulation is not running
+            // (if running, we want to preserve state for navigation)
+            if (!simulationRunning) {
+                sessionStorage.removeItem('session_active');
+            }
+        });
+
+        // Open individual viewers
+        document.getElementById('open-radar').addEventListener('click', () => {
+            window.location.href = '/radar';
+        });
+
+        document.getElementById('open-ecdis').addEventListener('click', () => {
+            window.location.href = 'http://localhost:5000/';
+        });
+
+        document.getElementById('open-bridge').addEventListener('click', () => {
+            window.location.href = '/bridge_controls';
+        });
+
+        document.getElementById('open-3d').addEventListener('click', () => {
+            window.location.href = '/bridge3d';
+        });
+
+        // Listen for exit broadcast to stop simulation
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'sim_exit' && e.newValue) {
+                // Exit was triggered - stop simulation
+                localStorage.setItem('sim_running', 'false');
+                simulationRunning = false;
+                const btn = document.getElementById('start-sim');
+                btn.textContent = '🚀 Start Simulation';
+                btn.classList.remove('btn-danger');
+                showNotification('Simulation stopped');
+            }
+        });
+
+        // Initialize
+        loadFromStorage();
+        connectWebSocket();
+        attachShipInputListeners();
+        
+        // Update button state based on current simulation status
+        if (simulationRunning) {
+            const btn = document.getElementById('start-sim');
+            btn.textContent = '🛑 Stop Simulation';
+            btn.classList.add('btn-danger');
+        }
+    </script>
+</body>
+</html>

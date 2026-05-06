@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bridge Controls - Maritime Simulator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4ecca3;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px rgba(78, 204, 163, 0.5);
+        }
+
+        .panel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .instrument-panel {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #4ecca3;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(78, 204, 163, 0.3);
+        }
+
+        .panel-title {
+            text-align: center;
+            color: #4ecca3;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Circular Gauge */
+        .gauge-container {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            margin: 0 auto;
+        }
+
+        .gauge-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .gauge-value {
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ecca3;
+            text-shadow: 0 0 10px rgba(78, 204, 163, 0.8);
+        }
+
+        .gauge-label {
+            position: absolute;
+            top: 75%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            color: #aaa;
+            text-transform: uppercase;
+        }
+
+        /* Digital Display */
+        .digital-display {
+            background: #000;
+            border: 2px solid #4ecca3;
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            font-weight: bold;
+            color: #0f0;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+            margin: 10px 0;
+        }
+
+        /* Steering Wheel */
+        .steering-wheel-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 20px auto;
+        }
+
+        .steering-wheel {
+            width: 100%;
+            height: 100%;
+            border: 8px solid #4ecca3;
+            border-radius: 50%;
+            background: radial-gradient(circle, #2a2a3e 0%, #1a1a2e 100%);
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            box-shadow: 0 0 30px rgba(78, 204, 163, 0.5);
+        }
+
+        .wheel-spoke {
+            position: absolute;
+            width: 4px;
+            height: 50%;
+            background: #4ecca3;
+            left: 50%;
+            top: 0;
+            transform-origin: bottom center;
+        }
+
+        .wheel-center {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: #4ecca3;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px rgba(78, 204, 163, 0.8);
+        }
+
+        /* Rudder Angle Indicator */
+        .rudder-indicator {
+            width: 100%;
+            height: 80px;
+            background: #000;
+            border: 2px solid #4ecca3;
+            border-radius: 5px;
+            position: relative;
+            margin: 15px 0;
+        }
+
+        .rudder-scale {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .rudder-needle {
+            position: absolute;
+            width: 4px;
+            height: 40px;
+            background: #f00;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+        }
+
+        /* Telegraph */
+        .telegraph-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .telegraph-side {
+            text-align: center;
+        }
+
+        .telegraph-label {
+            font-size: 14px;
+            color: #4ecca3;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .telegraph-positions {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .telegraph-btn {
+            background: rgba(78, 204, 163, 0.2);
+            border: 2px solid #4ecca3;
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+
+        .telegraph-btn:hover {
+            background: rgba(78, 204, 163, 0.4);
+        }
+
+        .telegraph-btn.active {
+            background: #4ecca3;
+            color: #000;
+            box-shadow: 0 0 20px rgba(78, 204, 163, 0.8);
+        }
+
+        /* NFU Joystick */
+        .joystick-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            margin: 20px auto;
+            background: radial-gradient(circle, #2a2a3e 0%, #1a1a2e 100%);
+            border: 4px solid #4ecca3;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(78, 204, 163, 0.5);
+        }
+
+        .joystick-stick {
+            position: absolute;
+            width: 45px;
+            height: 45px;
+            background: #4ecca3;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: move;
+            box-shadow: 0 0 20px rgba(78, 204, 163, 0.8);
+            transition: all 0.1s;
+        }
+
+        .joystick-stick:active {
+            box-shadow: 0 0 30px rgba(78, 204, 163, 1);
+        }
+
+        /* Motor Controls */
+        .motor-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .motor-panel {
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid #4ecca3;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .motor-label {
+            font-size: 14px;
+            color: #4ecca3;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .motor-status {
+            font-size: 24px;
+            color: #0f0;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .motor-btn {
+            background: rgba(78, 204, 163, 0.2);
+            border: 2px solid #4ecca3;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+
+        .motor-btn:hover {
+            background: rgba(78, 204, 163, 0.4);
+        }
+
+        .motor-btn.active {
+            background: #4ecca3;
+            color: #000;
+        }
+
+        /* ROT Indicator */
+        .rot-indicator {
+            width: 180px;
+            height: 80px;
+            margin: 15px auto;
+            position: relative;
+        }
+
+        .rot-bar-container {
+            width: 100%;
+            height: 25px;
+            background: #000;
+            border: 2px solid #4ecca3;
+            border-radius: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rot-bar {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(90deg, #f00 0%, #ff0 50%, #0f0 100%);
+            transition: all 0.3s;
+        }
+
+        .rot-value {
+            text-align: center;
+            font-size: 18px;
+            color: #4ecca3;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        /* Connection Status */
+        .status-bar {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #4ecca3;
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background: #f00;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+        }
+
+        .status-indicator.connected {
+            background: #0f0;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        }
+        /* Navigation ribbon */
+        .side-ribbon {
+            position: fixed;
+            top: 12px;
+            left: -36px; /* Hidden by default */
+            width: 44px;
+            padding: 6px;
+            background: rgba(22,33,62,0.95);
+            border: 1px solid #4ecca3;
+            border-radius: 0 8px 8px 0;
+            border-left: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 3000;
+            backdrop-filter: blur(2px);
+            transition: left 0.3s ease;
+        }
+        .side-ribbon:hover {
+            left: 0; /* Slide in on hover */
+        }
+        .side-ribbon::after {
+            content: '▶';
+            position: absolute;
+            right: -16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 40px;
+            background: rgba(22,33,62,0.95);
+            border: 1px solid #4ecca3;
+            border-left: none;
+            border-radius: 0 6px 6px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #4ecca3;
+            cursor: pointer;
+        }
+        .side-ribbon:hover::after {
+            content: '◀';
+        }
+        .ribbon-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            margin: 0;
+            border-radius: 6px;
+            background: #16213e;
+            color: #4ecca3;
+            border: 1px solid #244b55;
+            font-size: 16px;
+            line-height: 32px;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+            transition: background .2s, border-color .2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ribbon-btn:hover { background:#1f2d4a; border-color:#4ecca3; }
+        .ribbon-btn.exit { color:#ff6666; border-color:#a00; }
+        .ribbon-btn.fullscreen { color:#ffaa00; border-color:#aa6600; }
+    </style>
+</head>
+<body>
+    <div class="side-ribbon" aria-label="Navigation">
+        <button class="ribbon-btn" id="nav-main" title="Go to Main Menu">🏠</button>
+        <button class="ribbon-btn fullscreen" id="nav-fullscreen" title="Toggle Fullscreen">⛶</button>
+        <button class="ribbon-btn" id="nav-radar" title="Go to Radar">📡</button>
+        <button class="ribbon-btn" id="nav-ecdis" title="Go to ECDIS">🗺️</button>
+        <button class="ribbon-btn" id="nav-bridge" title="Bridge (current)">⚙️</button>
+        <button class="ribbon-btn exit" id="nav-exit" title="Exit Simulation">✖</button>
+    </div>
+    <div class="container">
+        <h1>⚓ BRIDGE CONTROLS ⚓</h1>
+
+        <div class="status-bar">
+            <span class="status-indicator" id="status-indicator"></span>
+            <span id="status-text">Connecting to simulator...</span>
+        </div>
+
+        <div class="panel-grid">
+            <!-- Gyro Compass -->
+            <div class="instrument-panel">
+                <div class="panel-title">Gyro Compass</div>
+                <div class="gauge-container">
+                    <canvas id="gyro-canvas" class="gauge-canvas"></canvas>
+                    <div class="gauge-value" id="gyro-value">000°</div>
+                    <div class="gauge-label">Heading</div>
+                </div>
+            </div>
+
+            <!-- Ship's Log (Speed) -->
+            <div class="instrument-panel">
+                <div class="panel-title">Ship's Log</div>
+                <div class="gauge-container">
+                    <canvas id="log-canvas" class="gauge-canvas"></canvas>
+                    <div class="gauge-value" id="log-value">0.0</div>
+                    <div class="gauge-label">Knots</div>
+                </div>
+            </div>
+
+            <!-- RPM Indicator -->
+            <div class="instrument-panel">
+                <div class="panel-title">RPM Indicator</div>
+                <div class="gauge-container">
+                    <canvas id="rpm-canvas" class="gauge-canvas"></canvas>
+                    <div class="gauge-value" id="rpm-value">0</div>
+                    <div class="gauge-label">RPM</div>
+                </div>
+            </div>
+
+            <!-- Rate of Turn -->
+            <div class="instrument-panel">
+                <div class="panel-title">Rate of Turn</div>
+                <div class="rot-indicator">
+                    <div class="rot-bar-container">
+                        <div class="rot-bar" id="rot-bar"></div>
+                    </div>
+                    <div class="rot-value" id="rot-value">0.0 °/min</div>
+                </div>
+                <div style="text-align: center; color: #aaa; font-size: 12px; margin-top: 10px;">
+                    <span>← PORT</span>
+                    <span style="margin: 0 20px;">|</span>
+                    <span>STBD →</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <!-- Steering Wheel -->
+            <div class="instrument-panel">
+                <div class="panel-title">Steering Wheel</div>
+                <div class="steering-wheel-container">
+                    <div class="steering-wheel" id="steering-wheel">
+                        <div class="wheel-spoke" style="transform: rotate(0deg);"></div>
+                        <div class="wheel-spoke" style="transform: rotate(45deg);"></div>
+                        <div class="wheel-spoke" style="transform: rotate(90deg);"></div>
+                        <div class="wheel-spoke" style="transform: rotate(135deg);"></div>
+                        <div class="wheel-spoke" style="transform: rotate(180deg);"></div>
+                        <div class="wheel-spoke" style="transform: rotate(225deg);"></div>
+                        <div class="wheel-spoke" style="transform: rotate(270deg);"></div>
+                        <div class="wheel-spoke" style="transform: rotate(315deg);"></div>
+                        <div class="wheel-center"></div>
+                    </div>
+                </div>
+                <div class="digital-display" id="wheel-angle">0°</div>
+            </div>
+
+            <!-- Rudder Angle Indicator -->
+            <div class="instrument-panel">
+                <div class="panel-title">Rudder Angle Indicator</div>
+                <div style="margin-top: 50px;">
+                    <div class="rudder-indicator">
+                        <div class="rudder-scale">
+                            <span>35° PORT</span>
+                            <span>0°</span>
+                            <span>35° STBD</span>
+                        </div>
+                        <div class="rudder-needle" id="rudder-needle"></div>
+                    </div>
+                    <div class="digital-display" id="rudder-angle">0°</div>
+                </div>
+            </div>
+
+            <!-- NFU Joystick Control -->
+            <div class="instrument-panel">
+                <div class="panel-title">NFU Control (Non Follow-Up)</div>
+                <div class="joystick-container" id="joystick-container">
+                    <div class="joystick-stick" id="joystick-stick"></div>
+                </div>
+                <div style="text-align: center; color: #aaa; font-size: 12px;">
+                    <div>LEFT: Port | RIGHT: Starboard</div>
+                    <div>UP: Increase | DOWN: Decrease</div>
+                </div>
+            </div>
+
+            <!-- Telegraph -->
+            <div class="instrument-panel">
+                <div class="panel-title">Engine Telegraph</div>
+                <div class="telegraph-container">
+                    <div class="telegraph-side">
+                        <div class="telegraph-label">ENGINE ORDER</div>
+                        <div class="telegraph-positions">
+                            <button class="telegraph-btn" data-position="FULL_ASTERN">FULL ASTERN</button>
+                            <button class="telegraph-btn" data-position="HALF_ASTERN">HALF ASTERN</button>
+                            <button class="telegraph-btn" data-position="SLOW_ASTERN">SLOW ASTERN</button>
+                            <button class="telegraph-btn active" data-position="STOP">STOP</button>
+                            <button class="telegraph-btn" data-position="SLOW_AHEAD">SLOW AHEAD</button>
+                            <button class="telegraph-btn" data-position="HALF_AHEAD">HALF AHEAD</button>
+                            <button class="telegraph-btn" data-position="FULL_AHEAD">FULL AHEAD</button>
+                        </div>
+                    </div>
+                    <div class="telegraph-side">
+                        <div class="telegraph-label">ENGINE RESPONSE</div>
+                        <div class="telegraph-positions">
+                            <div class="telegraph-btn active" style="cursor: default;">STOP</div>
+                        </div>
+                        <div style="margin-top: 20px; font-size: 14px; color: #aaa;">
+                            Engine responds to telegraph orders with realistic delay
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <!-- Steering Motors -->
+            <div class="instrument-panel">
+                <div class="panel-title">Steering Motors</div>
+                <div class="motor-controls">
+                    <div class="motor-panel">
+                        <div class="motor-label">MOTOR 1</div>
+                        <div class="motor-status" id="motor1-status">STANDBY</div>
+                        <button class="motor-btn" id="motor1-on">START</button>
+                        <button class="motor-btn" id="motor1-off">STOP</button>
+                    </div>
+                    <div class="motor-panel">
+                        <div class="motor-label">MOTOR 2</div>
+                        <div class="motor-status" id="motor2-status">STANDBY</div>
+                        <button class="motor-btn" id="motor2-on">START</button>
+                        <button class="motor-btn" id="motor2-off">STOP</button>
+                    </div>
+                </div>
+                <div style="text-align: center; margin-top: 15px; color: #aaa; font-size: 12px;">
+                    Redundant steering system for safety
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket connection to simulator
+        let ws = null;
+        let bridgeData = {
+            heading: 0,
+            speed: 0,
+            rpm: 0,
+            rot: 0,
+            rudder_angle: 0,
+            telegraph: 'STOP',
+            motor1: 'STANDBY',
+            motor2: 'STANDBY'
+        };
+
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:5001/bridge');
+            
+            ws.onopen = () => {
+                console.log('[WS] Connected to simulator');
+                document.getElementById('status-indicator').classList.add('connected');
+                document.getElementById('status-text').textContent = 'Connected to simulator';
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'bridge_state') {
+                    bridgeData = { ...bridgeData, ...data };
+                    updateDisplays();
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('[WS] Disconnected from simulator');
+                document.getElementById('status-indicator').classList.remove('connected');
+                document.getElementById('status-text').textContent = 'Disconnected - Retrying...';
+                setTimeout(connectWebSocket, 2000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('[WS] Error:', error);
+            };
+        }
+
+        function sendCommand(command, value) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ command, value }));
+            }
+        }
+
+        // Draw circular gauge
+        function drawGauge(canvasId, value, maxValue, label) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = canvas.width * 0.4;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Outer circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.strokeStyle = '#4ecca3';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Scale marks
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 2;
+            for (let i = 0; i <= 12; i++) {
+                const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+                const x1 = centerX + Math.cos(angle) * (radius - 10);
+                const y1 = centerY + Math.sin(angle) * (radius - 10);
+                const x2 = centerX + Math.cos(angle) * (radius - 20);
+                const y2 = centerY + Math.sin(angle) * (radius - 20);
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+
+            // Needle
+            const angle = ((value / maxValue) * Math.PI * 2) - Math.PI / 2;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(
+                centerX + Math.cos(angle) * (radius - 30),
+                centerY + Math.sin(angle) * (radius - 30)
+            );
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Center dot
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#4ecca3';
+            ctx.fill();
+        }
+
+        // Draw realistic gyro compass with rotating card
+        function drawGyroCompass(canvasId, heading) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const radius = canvas.width * 0.42;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Outer bezel
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2);
+            ctx.strokeStyle = '#4ecca3';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+
+            // Inner black circle (compass card background)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Save context for rotation
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(-heading * Math.PI / 180); // Rotate card opposite to heading
+
+            // Draw rotating compass card with cardinal points
+            const cardinals = [
+                {deg: 0, text: 'N', color: '#f00'},
+                {deg: 45, text: 'NE', color: '#fff'},
+                {deg: 90, text: 'E', color: '#fff'},
+                {deg: 135, text: 'SE', color: '#fff'},
+                {deg: 180, text: 'S', color: '#fff'},
+                {deg: 225, text: 'SW', color: '#fff'},
+                {deg: 270, text: 'W', color: '#fff'},
+                {deg: 315, text: 'NW', color: '#fff'}
+            ];
+
+            // Draw degree marks every 5 degrees
+            for (let deg = 0; deg < 360; deg += 5) {
+                const angle = deg * Math.PI / 180;
+                const isMajor = deg % 30 === 0;
+                const isCardinal = deg % 90 === 0;
+                
+                const innerRadius = radius - (isMajor ? 15 : 8);
+                const outerRadius = radius - 3;
+                
+                const x1 = Math.cos(angle) * innerRadius;
+                const y1 = Math.sin(angle) * innerRadius;
+                const x2 = Math.cos(angle) * outerRadius;
+                const y2 = Math.sin(angle) * outerRadius;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.strokeStyle = isCardinal ? '#f00' : '#4ecca3';
+                ctx.lineWidth = isMajor ? 2 : 1;
+                ctx.stroke();
+            }
+
+            // Draw degree numbers every 30 degrees
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for (let deg = 0; deg < 360; deg += 30) {
+                const angle = deg * Math.PI / 180;
+                const textRadius = radius - 28;
+                const x = Math.cos(angle) * textRadius;
+                const y = Math.sin(angle) * textRadius;
+                
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(heading * Math.PI / 180); // Counter-rotate text to keep upright
+                ctx.fillStyle = deg === 0 ? '#f00' : '#4ecca3';
+                ctx.fillText(String(deg).padStart(3, '0'), 0, 0);
+                ctx.restore();
+            }
+
+            // Draw cardinal letters
+            ctx.font = 'bold 16px Arial';
+            cardinals.forEach(card => {
+                const angle = card.deg * Math.PI / 180;
+                const textRadius = radius - 48;
+                const x = Math.cos(angle) * textRadius;
+                const y = Math.sin(angle) * textRadius;
+                
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(heading * Math.PI / 180); // Counter-rotate text
+                ctx.fillStyle = card.color;
+                ctx.fillText(card.text, 0, 0);
+                ctx.restore();
+            });
+
+            ctx.restore(); // Restore context after rotation
+
+            // Draw fixed lubber line (ship's heading indicator) at top
+            ctx.fillStyle = '#ff0';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            
+            // Triangle pointing down
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - radius + 15);
+            ctx.lineTo(centerX - 8, centerY - radius + 3);
+            ctx.lineTo(centerX + 8, centerY - radius + 3);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Center pivot dot
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#4ecca3';
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        function updateDisplays() {
+            // Gyro Compass - use specialized realistic compass
+            drawGyroCompass('gyro-canvas', bridgeData.heading);
+            document.getElementById('gyro-value').textContent = 
+                String(Math.round(bridgeData.heading)).padStart(3, '0') + '°';
+
+            // Ship's Log
+            drawGauge('log-canvas', bridgeData.speed, 25, 'Speed');
+            document.getElementById('log-value').textContent = bridgeData.speed.toFixed(1);
+
+            // RPM
+            drawGauge('rpm-canvas', Math.abs(bridgeData.rpm), 150, 'RPM');
+            document.getElementById('rpm-value').textContent = Math.round(bridgeData.rpm);
+
+            // Rate of Turn
+            const rotPercent = ((bridgeData.rot + 30) / 60) * 100;
+            document.getElementById('rot-bar').style.width = rotPercent + '%';
+            document.getElementById('rot-value').textContent = bridgeData.rot.toFixed(1) + ' °/min';
+
+            // Rudder Angle
+            const rudderPercent = ((bridgeData.rudder_angle + 35) / 70) * 100;
+            document.getElementById('rudder-needle').style.left = rudderPercent + '%';
+            document.getElementById('rudder-angle').textContent = 
+                bridgeData.rudder_angle.toFixed(1) + '°';
+
+            // Steering Wheel
+            document.getElementById('steering-wheel').style.transform = 
+                `rotate(${bridgeData.rudder_angle * 10}deg)`;
+            document.getElementById('wheel-angle').textContent = 
+                bridgeData.rudder_angle.toFixed(1) + '°';
+
+            // Motors
+            document.getElementById('motor1-status').textContent = bridgeData.motor1;
+            document.getElementById('motor2-status').textContent = bridgeData.motor2;
+        }
+
+        // Steering wheel interaction
+        let wheelAngle = 0;
+        let isDraggingWheel = false;
+        let lastWheelX = 0;
+
+        document.getElementById('steering-wheel').addEventListener('mousedown', (e) => {
+            isDraggingWheel = true;
+            lastWheelX = e.clientX;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDraggingWheel) {
+                const deltaX = e.clientX - lastWheelX;
+                wheelAngle += deltaX * 0.5;
+                wheelAngle = Math.max(-35, Math.min(35, wheelAngle));
+                
+                sendCommand('set_rudder', wheelAngle);
+                lastWheelX = e.clientX;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDraggingWheel = false;
+        });
+
+        // NFU Joystick
+        let isDraggingJoystick = false;
+        const joystickContainer = document.getElementById('joystick-container');
+        const joystickStick = document.getElementById('joystick-stick');
+
+        joystickStick.addEventListener('mousedown', (e) => {
+            isDraggingJoystick = true;
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDraggingJoystick) {
+                const rect = joystickContainer.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let offsetX = e.clientX - centerX;
+                let offsetY = e.clientY - centerY;
+                
+                const maxOffset = rect.width / 2 - 30;
+                const distance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+                
+                if (distance > maxOffset) {
+                    offsetX = (offsetX / distance) * maxOffset;
+                    offsetY = (offsetY / distance) * maxOffset;
+                }
+                
+                joystickStick.style.left = `calc(50% + ${offsetX}px)`;
+                joystickStick.style.top = `calc(50% + ${offsetY}px)`;
+                
+                // Calculate rudder command from joystick position
+                const rudderCommand = (offsetX / maxOffset) * 35;
+                sendCommand('set_rudder', rudderCommand);
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDraggingJoystick) {
+                isDraggingJoystick = false;
+                joystickStick.style.left = '50%';
+                joystickStick.style.top = '50%';
+            }
+        });
+
+        // Telegraph controls
+        document.querySelectorAll('.telegraph-btn[data-position]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const position = btn.dataset.position;
+                
+                // Update UI
+                document.querySelectorAll('.telegraph-btn[data-position]').forEach(b => {
+                    b.classList.remove('active');
+                });
+                btn.classList.add('active');
+                
+                // Send command
+                sendCommand('set_telegraph', position);
+            });
+        });
+
+        // Motor controls
+        document.getElementById('motor1-on').addEventListener('click', () => {
+            sendCommand('motor1', 'RUNNING');
+        });
+        document.getElementById('motor1-off').addEventListener('click', () => {
+            sendCommand('motor1', 'STANDBY');
+        });
+        document.getElementById('motor2-on').addEventListener('click', () => {
+            sendCommand('motor2', 'RUNNING');
+        });
+        document.getElementById('motor2-off').addEventListener('click', () => {
+            sendCommand('motor2', 'STANDBY');
+        });
+
+        // Initialize
+        connectWebSocket();
+        
+        // Set canvas sizes
+        document.querySelectorAll('.gauge-canvas').forEach(canvas => {
+            canvas.width = 180;
+            canvas.height = 180;
+        });
+
+        // Initial draw
+        updateDisplays();
+
+        // Periodic update for smooth animations
+        setInterval(updateDisplays, 50);
+    </script>
+    <script>
+        // Enter fullscreen mode on load if it was previously active
+        document.addEventListener('DOMContentLoaded', () => {
+            const wasFullscreen = localStorage.getItem('viewer_fullscreen') === 'true';
+            if (wasFullscreen) {
+                localStorage.removeItem('viewer_fullscreen'); // Clear the flag
+                // Small delay to attempt fullscreen (may be blocked by browser security)
+                setTimeout(() => {
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(err => {
+                            console.log('Auto-fullscreen blocked - click fullscreen button to restore');
+                            // Flash the fullscreen button to indicate user should click it
+                            const btn = document.getElementById('nav-fullscreen');
+                            if (btn) {
+                                btn.style.animation = 'pulse 1s ease-in-out 3';
+                            }
+                        });
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.msRequestFullscreen) {
+                        elem.msRequestFullscreen();
+                    }
+                }, 100);
+            }
+        });
+
+        // Navigation ribbon logic
+        (function(){
+            const go = (url) => { window.location.href = url; };
+            const id = (x) => document.getElementById(x);
+            
+            // Fullscreen toggle button
+            id('nav-fullscreen')?.addEventListener('click', ()=> {
+                if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+                    // Enter fullscreen
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen().catch(err => {
+                            console.log('Fullscreen request failed:', err);
+                        });
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.msRequestFullscreen) {
+                        elem.msRequestFullscreen();
+                    }
+                } else {
+                    // Exit fullscreen
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen().catch(() => {});
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+            });
+            
+            id('nav-main')?.addEventListener('click', ()=> {
+                // Exit fullscreen before going to menu
+                localStorage.removeItem('viewer_fullscreen');
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                setTimeout(() => go('http://127.0.0.1:5001/'), 100);
+            });
+            id('nav-radar')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('/radar');
+            });
+            id('nav-ecdis')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('http://127.0.0.1:5000/');
+            });
+            id('nav-bridge')?.addEventListener('click', ()=> {
+                // Save fullscreen state before navigating
+                if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                    localStorage.setItem('viewer_fullscreen', 'true');
+                }
+                go('/bridge_controls');
+            });
+            id('nav-exit')?.addEventListener('click', ()=> {
+                // Confirm exit
+                if (!confirm('Exit simulation? This will stop the simulation and close all windows.')) {
+                    return;
+                }
+                // Exit fullscreen first
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(() => {});
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                // Stop simulation first
+                localStorage.setItem('sim_running', 'false');
+                // Then broadcast exit signal to all windows
+                localStorage.setItem('sim_exit', Date.now().toString());
+                // Try to close this window
+                setTimeout(() => {
+                    window.close();
+                    // If window.close() doesn't work, navigate to menu
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5001/';
+                    }, 100);
+                }, 200);
+            });
+            
+            // Listen for exit broadcast from other windows
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'sim_exit' && e.newValue) {
+                    // Another window triggered exit - close this window
+                    window.close();
+                    // Fallback if close doesn't work
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5001/';
+                    }, 100);
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
