@@ -9,6 +9,13 @@
     48
   ],
   "ppi_radius_px": 280,
+  "nmea_output": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 8011,
+    "protocol": "udp",
+    "rate_hz": 1.0
+  },
   "colors": {
     "ppi_outline": [
       28,
