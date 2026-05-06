@@ -1,0 +1,45 @@
+# Python environments
+.venv/
+venv/
+env/
+
+# Python cache/build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Local/runtime files
+last_scenario.json
+web/last_scenario.json
+*.log
+
+# Installers and archives
+*.exe
+*.msi
+*.zip
+*.7z
+*.rar
+
+# Large local chart/ENC datasets - keep README placeholders in Git
+bridge_sim/areas/noaa_charts/*.000
+bridge_sim/areas/noaa_charts/*.001
+bridge_sim/areas/noaa_charts/*.002
+bridge_sim/areas/noaa_charts/*.003
+bridge_sim/areas/noaa_charts/*.004
+bridge_sim/areas/noaa_charts/*.005
+bridge_sim/areas/noaa_charts/*.006
+bridge_sim/areas/noaa_charts/*.SHP
+bridge_sim/areas/noaa_charts/*.shp
+bridge_sim/areas/noaa_charts/*.gpkg
+bridge_sim/areas/noaa_charts/*.tif
+bridge_sim/areas/noaa_charts/*.tiff
